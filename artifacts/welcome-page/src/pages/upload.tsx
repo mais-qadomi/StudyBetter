@@ -6,6 +6,9 @@ import "react-pdf/dist/Page/TextLayer.css";
 
 pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
 
+const MAX_FILE_MB = 100;
+const MAX_FILE_BYTES = MAX_FILE_MB * 1024 * 1024;
+
 const C = {
   bg: "linear-gradient(135deg, #e8f4fb 0%, #fce4f0 50%, #e4f7ec 100%)",
   card: "#ffffff",
@@ -40,7 +43,7 @@ const S = {
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: "2rem",
+    marginBottom: "1rem",
   },
   title: {
     fontSize: "1.8rem",
@@ -59,6 +62,34 @@ const S = {
     cursor: "pointer",
     fontWeight: 600,
   },
+  explainAllBtn: (busy: boolean) => ({
+    width: "100%",
+    maxWidth: "860px",
+    background: busy
+      ? "rgba(176,140,232,0.35)"
+      : "linear-gradient(135deg, #c8a8f0, #a880e8)",
+    color: "#fff",
+    border: "none",
+    borderRadius: "14px",
+    padding: "0.85rem 2rem",
+    fontSize: "1rem",
+    fontWeight: 700,
+    cursor: busy ? "not-allowed" : "pointer",
+    boxShadow: "0 6px 20px rgba(168,128,232,0.35)",
+    marginBottom: "1.5rem",
+    transition: "opacity 0.2s",
+  }),
+  progressBar: {
+    width: "100%",
+    maxWidth: "860px",
+    marginBottom: "1.5rem",
+    background: "rgba(255,255,255,0.7)",
+    borderRadius: "12px",
+    padding: "0.8rem 1.2rem",
+    border: "1px solid #d8c8f0",
+    boxShadow: "0 2px 10px rgba(168,128,232,0.15)",
+    textAlign: "center" as const,
+  },
   dropZone: (active: boolean) => ({
     width: "100%",
     maxWidth: "860px",
@@ -69,7 +100,7 @@ const S = {
     background: active ? C.drop.bgActive : C.drop.bg,
     cursor: "pointer",
     transition: "all 0.2s ease",
-    marginBottom: "2rem",
+    marginBottom: "1.5rem",
     boxShadow: "0 4px 20px rgba(168,208,240,0.2)",
   }),
   uploadIcon: { fontSize: "3rem", marginBottom: "1rem" },
@@ -146,12 +177,41 @@ const S = {
   loadingText: { color: C.loadingText, fontSize: "1rem", marginTop: "3rem" },
 };
 
-function PageWithText({ pageNumber, numPages, width }: { pageNumber: number; numPages: number; width: number }) {
+type PageResult = {
+  translation: string | null;
+  explanation: string;
+  error: string;
+};
+
+async function callExplain(text: string): Promise<PageResult> {
+  const res = await fetch("/api/explain", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text }),
+  });
+  const data = await res.json() as { explanation?: string; translation?: string | null; error?: string };
+  if (!res.ok) throw new Error(data.error ?? "خطأ غير معروف");
+  return {
+    translation: data.translation ?? null,
+    explanation: data.explanation ?? "",
+    error: "",
+  };
+}
+
+function PageWithText({
+  pageNumber, numPages, width,
+  result, explaining,
+  onTextReady, onExplain,
+}: {
+  pageNumber: number;
+  numPages: number;
+  width: number;
+  result: PageResult | null;
+  explaining: boolean;
+  onTextReady: (pageNum: number, text: string) => void;
+  onExplain: (pageNum: number) => void;
+}) {
   const [text, setText] = useState<string>("");
-  const [explanation, setExplanation] = useState<string>("");
-  const [translation, setTranslation] = useState<string | null>(null);
-  const [explaining, setExplaining] = useState(false);
-  const [explainError, setExplainError] = useState<string>("");
 
   const handlePageLoad = useCallback(async (page: pdfjs.PDFPageProxy) => {
     try {
@@ -162,33 +222,13 @@ function PageWithText({ pageNumber, numPages, width }: { pageNumber: number; num
         .replace(/\s+/g, " ")
         .trim();
       setText(extracted);
+      onTextReady(pageNumber, extracted);
     } catch {
-      setText("تعذّر استخراج النص من هذه الصفحة.");
+      const fallback = "تعذّر استخراج النص من هذه الصفحة.";
+      setText(fallback);
+      onTextReady(pageNumber, fallback);
     }
-  }, []);
-
-  const handleExplain = async () => {
-    if (!text || explaining) return;
-    setExplaining(true);
-    setExplainError("");
-    setExplanation("");
-    setTranslation(null);
-    try {
-      const res = await fetch("/api/explain", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
-      });
-      const data = await res.json() as { explanation?: string; translation?: string | null; error?: string };
-      if (!res.ok) throw new Error(data.error ?? "خطأ غير معروف");
-      setExplanation(data.explanation ?? "");
-      setTranslation(data.translation ?? null);
-    } catch (err: unknown) {
-      setExplainError(err instanceof Error ? err.message : "فشل الاتصال بالسيرفر");
-    } finally {
-      setExplaining(false);
-    }
-  };
+  }, [pageNumber, onTextReady]);
 
   return (
     <div style={S.pageCard}>
@@ -204,7 +244,7 @@ function PageWithText({ pageNumber, numPages, width }: { pageNumber: number; num
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.5rem" }}>
           <p style={{ ...S.textLabel, margin: 0 }}>النص المستخرج</p>
           <button
-            onClick={handleExplain}
+            onClick={() => onExplain(pageNumber)}
             disabled={!text || explaining}
             style={{
               background: explaining
@@ -218,40 +258,40 @@ function PageWithText({ pageNumber, numPages, width }: { pageNumber: number; num
               fontWeight: 700,
               cursor: text && !explaining ? "pointer" : "not-allowed",
               boxShadow: "0 3px 12px rgba(176,140,232,0.35)",
-              transition: "opacity 0.2s",
               whiteSpace: "nowrap" as const,
             }}
           >
             {explaining ? "⏳ جاري الشرح…" : "✨ اشرح هذا المحتوى"}
           </button>
         </div>
+
         <textarea
           readOnly
           value={text || "جاري استخراج النص…"}
           style={S.textArea}
         />
 
-        {explainError && (
+        {result?.error && (
           <div style={{ marginTop: "0.8rem", padding: "0.9rem 1rem", background: "#fff0f0", border: "1px solid #f0c0c0", borderRadius: "8px" }}>
-            <p style={{ ...S.textLabel, margin: "0 0 0.5rem", color: "#c06060" }}>خطأ</p>
-            <p style={{ margin: 0, fontSize: "0.88rem", lineHeight: 1.8, color: "#c06060", direction: "rtl" }}>{explainError}</p>
+            <p style={{ ...S.textLabel, margin: "0 0 0.4rem", color: "#c06060" }}>خطأ</p>
+            <p style={{ margin: 0, fontSize: "0.88rem", lineHeight: 1.8, color: "#c06060", direction: "rtl" }}>{result.error}</p>
           </div>
         )}
 
-        {translation && (
+        {result?.translation && (
           <div style={{ marginTop: "0.8rem", padding: "0.9rem 1rem", background: "#f5f0ff", border: "1px solid #d0b8f0", borderRadius: "8px" }}>
-            <p style={{ ...S.textLabel, margin: "0 0 0.5rem", color: "#8060c0" }}>🌐 الترجمة</p>
+            <p style={{ ...S.textLabel, margin: "0 0 0.4rem", color: "#8060c0" }}>🌐 الترجمة</p>
             <p style={{ margin: 0, fontSize: "0.88rem", lineHeight: 1.9, color: "#4a3a7a", whiteSpace: "pre-wrap" as const, direction: "rtl" }}>
-              {translation}
+              {result.translation}
             </p>
           </div>
         )}
 
-        {explanation && (
+        {result?.explanation && (
           <div style={{ marginTop: "0.8rem", padding: "0.9rem 1rem", background: "#f0f8ff", border: "1px solid #c0d8f0", borderRadius: "8px" }}>
-            <p style={{ ...S.textLabel, margin: "0 0 0.5rem", color: "#5070c0" }}>🎓 الشرح الأكاديمي</p>
+            <p style={{ ...S.textLabel, margin: "0 0 0.4rem", color: "#5070c0" }}>🎓 الشرح الأكاديمي</p>
             <p style={{ margin: 0, fontSize: "0.88rem", lineHeight: 1.9, color: "#3a4a7a", whiteSpace: "pre-wrap" as const, direction: "rtl" }}>
-              {explanation}
+              {result.explanation}
             </p>
           </div>
         )}
@@ -264,15 +304,35 @@ export default function UploadPage() {
   const [, navigate] = useLocation();
   const [file, setFile] = useState<File | null>(null);
   const [fileUrl, setFileUrl] = useState<string | null>(null);
+  const [fileError, setFileError] = useState<string>("");
   const [numPages, setNumPages] = useState<number>(0);
   const [dragActive, setDragActive] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const [pageTexts, setPageTexts] = useState<Record<number, string>>({});
+  const [pageResults, setPageResults] = useState<Record<number, PageResult>>({});
+  const [explaining, setExplaining] = useState<Set<number>>(new Set());
+  const [bulkProgress, setBulkProgress] = useState<{ current: number; total: number } | null>(null);
+
+  const pageTextsRef = useRef<Record<number, string>>({});
+
   const loadFile = useCallback((f: File) => {
     if (!f.type.includes("pdf")) return;
+    if (f.size > MAX_FILE_BYTES) {
+      setFileError(
+        `حجم الملف (${(f.size / 1024 / 1024).toFixed(1)} MB) يتجاوز الحد الأقصى المسموح به (${MAX_FILE_MB} MB). الرجاء اختيار ملف أصغر حجماً.`
+      );
+      return;
+    }
+    setFileError("");
     if (fileUrl) URL.revokeObjectURL(fileUrl);
     setFile(f);
     setNumPages(0);
+    setPageTexts({});
+    setPageResults({});
+    setExplaining(new Set());
+    setBulkProgress(null);
+    pageTextsRef.current = {};
     setFileUrl(URL.createObjectURL(f));
   }, [fileUrl]);
 
@@ -288,15 +348,46 @@ export default function UploadPage() {
     if (f) loadFile(f);
   };
 
+  const handleTextReady = useCallback((pageNum: number, text: string) => {
+    pageTextsRef.current[pageNum] = text;
+    setPageTexts(prev => ({ ...prev, [pageNum]: text }));
+  }, []);
+
+  const explainOnePage = useCallback(async (pageNum: number) => {
+    const text = pageTextsRef.current[pageNum];
+    if (!text) return;
+    setExplaining(prev => new Set(prev).add(pageNum));
+    try {
+      const result = await callExplain(text);
+      setPageResults(prev => ({ ...prev, [pageNum]: result }));
+    } catch (err: unknown) {
+      setPageResults(prev => ({
+        ...prev,
+        [pageNum]: { translation: null, explanation: "", error: err instanceof Error ? err.message : "فشل الاتصال بالسيرفر" },
+      }));
+    } finally {
+      setExplaining(prev => { const s = new Set(prev); s.delete(pageNum); return s; });
+    }
+  }, []);
+
+  const handleExplainAll = useCallback(async () => {
+    if (bulkProgress || numPages === 0) return;
+    setPageResults({});
+    for (let i = 1; i <= numPages; i++) {
+      setBulkProgress({ current: i, total: numPages });
+      await explainOnePage(i);
+    }
+    setBulkProgress(null);
+  }, [bulkProgress, numPages, explainOnePage]);
+
   const pageWidth = Math.min(typeof window !== "undefined" ? window.innerWidth - 64 : 820, 820);
+  const isBulkBusy = bulkProgress !== null;
 
   return (
     <div dir="rtl" style={S.page}>
       <div style={S.header}>
         <h1 style={S.title}>رفع ملف PDF</h1>
-        <button style={S.backBtn} onClick={() => navigate("/")}>
-          ← الرئيسية
-        </button>
+        <button style={S.backBtn} onClick={() => navigate("/")}>← الرئيسية</button>
       </div>
 
       <div
@@ -308,28 +399,54 @@ export default function UploadPage() {
       >
         <div style={S.uploadIcon}>📄</div>
         <p style={S.dropText}>اسحب ملف PDF هنا أو اضغط للاختيار</p>
-        <p style={S.dropSub}>يدعم ملفات PDF فقط</p>
-        <button
-          style={S.uploadBtn}
-          onClick={(e) => { e.stopPropagation(); inputRef.current?.click(); }}
-        >
+        <p style={S.dropSub}>يدعم ملفات PDF فقط • الحد الأقصى: {MAX_FILE_MB} MB</p>
+        <button style={S.uploadBtn} onClick={(e) => { e.stopPropagation(); inputRef.current?.click(); }}>
           اختر ملفاً
         </button>
         {file && <p style={S.fileName}>📎 {file.name}</p>}
-        <input
-          ref={inputRef}
-          type="file"
-          accept="application/pdf"
-          style={{ display: "none" }}
-          onChange={onFileChange}
-        />
+        <input ref={inputRef} type="file" accept="application/pdf" style={{ display: "none" }} onChange={onFileChange} />
       </div>
+
+      {fileError && (
+        <div style={{ width: "100%", maxWidth: "860px", marginBottom: "1.5rem", padding: "1rem 1.2rem", background: "#fff0f0", border: "1px solid #f0c0c0", borderRadius: "14px" }}>
+          <p style={{ margin: 0, color: "#c05050", fontWeight: 600, fontSize: "0.95rem" }}>⚠️ {fileError}</p>
+        </div>
+      )}
+
+      {fileUrl && numPages > 0 && (
+        <>
+          <button
+            style={S.explainAllBtn(isBulkBusy)}
+            onClick={handleExplainAll}
+            disabled={isBulkBusy}
+          >
+            {isBulkBusy ? `⏳ جاري الشرح…` : "🚀 اشرح كل الصفحات"}
+          </button>
+
+          {bulkProgress && (
+            <div style={S.progressBar}>
+              <p style={{ margin: "0 0 0.5rem", fontSize: "0.9rem", color: "#7060c0", fontWeight: 700 }}>
+                جاري شرح الصفحة {bulkProgress.current} من {bulkProgress.total}
+              </p>
+              <div style={{ background: "#e8d8f8", borderRadius: "8px", height: "10px", overflow: "hidden" }}>
+                <div style={{
+                  width: `${(bulkProgress.current / bulkProgress.total) * 100}%`,
+                  background: "linear-gradient(90deg, #c8a8f0, #a880e8)",
+                  height: "100%",
+                  borderRadius: "8px",
+                  transition: "width 0.4s ease",
+                }} />
+              </div>
+            </div>
+          )}
+        </>
+      )}
 
       {fileUrl && (
         <div style={S.pagesWrapper}>
           <Document
             file={fileUrl}
-            onLoadSuccess={({ numPages }) => setNumPages(numPages)}
+            onLoadSuccess={({ numPages: n }) => setNumPages(n)}
             loading={<p style={S.loadingText}>جاري تحميل الملف…</p>}
             error={<p style={{ ...S.loadingText, color: C.errorText }}>تعذّر تحميل الملف.</p>}
           >
@@ -339,6 +456,10 @@ export default function UploadPage() {
                 pageNumber={i + 1}
                 numPages={numPages}
                 width={pageWidth}
+                result={pageResults[i + 1] ?? null}
+                explaining={explaining.has(i + 1)}
+                onTextReady={handleTextReady}
+                onExplain={explainOnePage}
               />
             ))}
           </Document>
