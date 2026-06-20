@@ -148,6 +148,9 @@ const S = {
 
 function PageWithText({ pageNumber, numPages, width }: { pageNumber: number; numPages: number; width: number }) {
   const [text, setText] = useState<string>("");
+  const [explanation, setExplanation] = useState<string>("");
+  const [explaining, setExplaining] = useState(false);
+  const [explainError, setExplainError] = useState<string>("");
 
   const handlePageLoad = useCallback(async (page: pdfjs.PDFPageProxy) => {
     try {
@@ -163,6 +166,27 @@ function PageWithText({ pageNumber, numPages, width }: { pageNumber: number; num
     }
   }, []);
 
+  const handleExplain = async () => {
+    if (!text || explaining) return;
+    setExplaining(true);
+    setExplainError("");
+    setExplanation("");
+    try {
+      const res = await fetch("/api/explain", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      const data = await res.json() as { explanation?: string; error?: string };
+      if (!res.ok) throw new Error(data.error ?? "خطأ غير معروف");
+      setExplanation(data.explanation ?? "");
+    } catch (err: unknown) {
+      setExplainError(err instanceof Error ? err.message : "فشل الاتصال بالسيرفر");
+    } finally {
+      setExplaining(false);
+    }
+  };
+
   return (
     <div style={S.pageCard}>
       <p style={S.pageLabel}>صفحة {pageNumber} من {numPages}</p>
@@ -174,12 +198,59 @@ function PageWithText({ pageNumber, numPages, width }: { pageNumber: number; num
         onLoadSuccess={handlePageLoad}
       />
       <div style={S.textBox}>
-        <p style={S.textLabel}>النص المستخرج</p>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.5rem" }}>
+          <p style={{ ...S.textLabel, margin: 0 }}>النص المستخرج</p>
+          <button
+            onClick={handleExplain}
+            disabled={!text || explaining}
+            style={{
+              background: explaining
+                ? "rgba(200,168,240,0.4)"
+                : "linear-gradient(135deg, #d0b8f0, #b89ce8)",
+              color: "#fff",
+              border: "none",
+              borderRadius: "8px",
+              padding: "0.35rem 0.9rem",
+              fontSize: "0.8rem",
+              fontWeight: 700,
+              cursor: text && !explaining ? "pointer" : "not-allowed",
+              boxShadow: "0 3px 12px rgba(176,140,232,0.35)",
+              transition: "opacity 0.2s",
+              whiteSpace: "nowrap" as const,
+            }}
+          >
+            {explaining ? "⏳ جاري الشرح…" : "✨ اشرح هذا المحتوى"}
+          </button>
+        </div>
         <textarea
           readOnly
           value={text || "جاري استخراج النص…"}
           style={S.textArea}
         />
+
+        {(explanation || explainError) && (
+          <div style={{
+            marginTop: "0.8rem",
+            padding: "0.9rem 1rem",
+            background: explainError ? "#fff0f0" : "#f0f8ff",
+            border: `1px solid ${explainError ? "#f0c0c0" : "#c0d8f0"}`,
+            borderRadius: "8px",
+          }}>
+            <p style={{ ...S.textLabel, margin: "0 0 0.5rem", color: explainError ? "#c06060" : "#8070c0" }}>
+              {explainError ? "خطأ" : "🎓 الشرح الأكاديمي"}
+            </p>
+            <p style={{
+              margin: 0,
+              fontSize: "0.88rem",
+              lineHeight: 1.8,
+              color: explainError ? "#c06060" : "#4a5a7a",
+              whiteSpace: "pre-wrap" as const,
+              direction: "rtl",
+            }}>
+              {explainError || explanation}
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
