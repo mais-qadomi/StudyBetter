@@ -1,5 +1,4 @@
 import { Router, type IRouter } from "express";
-import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const router: IRouter = Router();
 
@@ -17,26 +16,50 @@ router.post("/explain", async (req, res) => {
     return;
   }
 
-  try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-
-    const prompt = `أنت مساعد أكاديمي متخصص. المطلوب منك شرح النص التالي شرحاً أكاديمياً مبسطاً باللغة العربية، مع إبراز الأفكار الرئيسية والمفاهيم المهمة بشكل واضح ومنظم.
+  const prompt = `أنت مساعد أكاديمي متخصص. المطلوب منك شرح النص التالي شرحاً أكاديمياً مبسطاً باللغة العربية، مع إبراز الأفكار الرئيسية والمفاهيم المهمة بشكل واضح ومنظم.
 
 النص:
 ${text}
 
 الشرح:`;
 
-    const result = await model.generateContent(prompt);
-    const explanation = result.response.text();
+  const models = ["gemini-2.0-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash"];
 
-    res.json({ explanation });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "خطأ غير معروف";
-    req.log.error({ err }, "Gemini API error");
-    res.status(500).json({ error: `فشل الاتصال بـ Gemini: ${message}` });
+  for (const model of models) {
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${apiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { maxOutputTokens: 2048 },
+          }),
+        }
+      );
+
+      if (response.status === 404) continue;
+
+      if (!response.ok) {
+        const errBody = await response.text();
+        req.log.error({ status: response.status, body: errBody }, "Gemini API error");
+        res.status(502).json({ error: `خطأ من Gemini (${response.status}): ${errBody.slice(0, 200)}` });
+        return;
+      }
+
+      const data = await response.json() as {
+        candidates?: { content?: { parts?: { text?: string }[] } }[];
+      };
+      const explanation = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+      res.json({ explanation, model });
+      return;
+    } catch (err: unknown) {
+      req.log.error({ err, model }, "Fetch error");
+    }
   }
+
+  res.status(502).json({ error: "لا يوجد نموذج Gemini متاح لهذا المفتاح. تحقق من صلاحيات المفتاح في Google AI Studio." });
 });
 
 export default router;
