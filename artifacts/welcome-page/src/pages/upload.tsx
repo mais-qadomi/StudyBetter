@@ -186,6 +186,28 @@ type PageResult = {
   error: string;
 };
 
+function FormattedText({ text, color }: { text: string; color: string }) {
+  const paragraphs = text
+    .split(/\n\n+/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+
+  return (
+    <div style={{ direction: "rtl" }}>
+      {paragraphs.map((para, idx) => (
+        <p key={idx} style={{
+          margin: idx < paragraphs.length - 1 ? "0 0 0.75rem" : "0",
+          fontSize: "0.88rem",
+          lineHeight: 1.9,
+          color,
+        }}>
+          {para}
+        </p>
+      ))}
+    </div>
+  );
+}
+
 async function callExplain(text: string): Promise<PageResult> {
   const res = await fetch("/api/explain", {
     method: "POST",
@@ -283,19 +305,15 @@ function PageWithText({
 
         {result?.translation && (
           <div style={{ marginTop: "0.8rem", padding: "0.9rem 1rem", background: "#f5f0ff", border: "1px solid #d0b8f0", borderRadius: "8px" }}>
-            <p style={{ ...S.textLabel, margin: "0 0 0.4rem", color: "#8060c0" }}>🌐 الترجمة</p>
-            <p style={{ margin: 0, fontSize: "0.88rem", lineHeight: 1.9, color: "#4a3a7a", whiteSpace: "pre-wrap" as const, direction: "rtl" }}>
-              {result.translation}
-            </p>
+            <p style={{ ...S.textLabel, margin: "0 0 0.6rem", color: "#8060c0" }}>🌐 الترجمة</p>
+            <FormattedText text={result.translation} color="#4a3a7a" />
           </div>
         )}
 
         {result?.explanation && (
           <div style={{ marginTop: "0.8rem", padding: "0.9rem 1rem", background: "#f0f8ff", border: "1px solid #c0d8f0", borderRadius: "8px" }}>
-            <p style={{ ...S.textLabel, margin: "0 0 0.4rem", color: "#5070c0" }}>🎓 الشرح الأكاديمي</p>
-            <p style={{ margin: 0, fontSize: "0.88rem", lineHeight: 1.9, color: "#3a4a7a", whiteSpace: "pre-wrap" as const, direction: "rtl" }}>
-              {result.explanation}
-            </p>
+            <p style={{ ...S.textLabel, margin: "0 0 0.6rem", color: "#5070c0" }}>🎓 الشرح الأكاديمي</p>
+            <FormattedText text={result.explanation} color="#3a4a7a" />
           </div>
         )}
       </div>
