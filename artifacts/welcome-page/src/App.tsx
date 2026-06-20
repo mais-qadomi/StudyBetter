@@ -14,20 +14,19 @@ function HomePage() {
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
-        background: "linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)",
+        background: "linear-gradient(135deg, #e8f4fb 0%, #fce4f0 50%, #e4f7ec 100%)",
         fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
         padding: "2rem",
       }}
     >
       <div
         style={{
-          background: "rgba(255,255,255,0.05)",
-          backdropFilter: "blur(12px)",
-          border: "1px solid rgba(255,255,255,0.12)",
+          background: "#ffffff",
+          border: "1px solid #d8eaf7",
           borderRadius: "24px",
           padding: "3rem 4rem",
           textAlign: "center",
-          boxShadow: "0 25px 60px rgba(0,0,0,0.4)",
+          boxShadow: "0 12px 40px rgba(168,208,240,0.3)",
           maxWidth: "480px",
           width: "100%",
         }}
@@ -36,18 +35,18 @@ function HomePage() {
           style={{
             fontSize: "3.5rem",
             fontWeight: 800,
-            color: "#ffffff",
+            color: "#5a8fc7",
             margin: 0,
             marginBottom: "0.5rem",
             letterSpacing: "2px",
-            textShadow: "0 0 40px rgba(99,179,237,0.5)",
+            textShadow: "0 2px 16px rgba(100,160,220,0.25)",
           }}
         >
           مرحبا
         </h1>
         <p
           style={{
-            color: "rgba(255,255,255,0.5)",
+            color: "#9ab8d8",
             fontSize: "1rem",
             marginBottom: "2.5rem",
             marginTop: "0.5rem",
@@ -59,7 +58,7 @@ function HomePage() {
         <button
           onClick={() => setMessage("أهلاً وسهلاً بك! يسعدنا وجودك هنا.")}
           style={{
-            background: "linear-gradient(135deg, #63b3ed, #4299e1)",
+            background: "linear-gradient(135deg, #a8d8f0, #88bce8)",
             color: "#fff",
             border: "none",
             borderRadius: "14px",
@@ -67,7 +66,7 @@ function HomePage() {
             fontSize: "1.15rem",
             fontWeight: 700,
             cursor: "pointer",
-            boxShadow: "0 8px 24px rgba(66,153,225,0.4)",
+            boxShadow: "0 8px 24px rgba(136,188,232,0.45)",
             letterSpacing: "0.5px",
             display: "block",
             width: "100%",
@@ -81,16 +80,16 @@ function HomePage() {
           to="/upload"
           style={{
             display: "block",
-            background: "rgba(255,255,255,0.08)",
-            border: "1px solid rgba(255,255,255,0.15)",
-            color: "#bee3f8",
+            background: "linear-gradient(135deg, #f0c8e0, #e8a8d0)",
+            color: "#fff",
             borderRadius: "14px",
-            padding: "0.75rem 2rem",
+            padding: "0.85rem 2rem",
             fontSize: "1rem",
-            fontWeight: 600,
+            fontWeight: 700,
             cursor: "pointer",
             textDecoration: "none",
             textAlign: "center",
+            boxShadow: "0 8px 24px rgba(232,168,208,0.4)",
           }}
         >
           📄 رفع ملف PDF
@@ -101,12 +100,12 @@ function HomePage() {
             style={{
               marginTop: "1.5rem",
               padding: "1rem 1.5rem",
-              background: "rgba(99,179,237,0.15)",
-              border: "1px solid rgba(99,179,237,0.35)",
+              background: "#e8f8f0",
+              border: "1px solid #a8e0c8",
               borderRadius: "12px",
-              color: "#bee3f8",
+              color: "#4a9a78",
               fontSize: "1.05rem",
-              fontWeight: 500,
+              fontWeight: 600,
               animation: "fadeIn 0.3s ease",
             }}
           >
