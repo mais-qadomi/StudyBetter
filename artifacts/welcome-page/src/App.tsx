@@ -1,11 +1,9 @@
 import { useState } from "react";
+import { Switch, Route, Link } from "wouter";
+import UploadPage from "./pages/upload";
 
-function App() {
+function HomePage() {
   const [message, setMessage] = useState<string | null>(null);
-
-  const handleClick = () => {
-    setMessage("أهلاً وسهلاً بك! يسعدنا وجودك هنا.");
-  };
 
   return (
     <div
@@ -59,7 +57,7 @@ function App() {
         </p>
 
         <button
-          onClick={handleClick}
+          onClick={() => setMessage("أهلاً وسهلاً بك! يسعدنا وجودك هنا.")}
           style={{
             background: "linear-gradient(135deg, #63b3ed, #4299e1)",
             color: "#fff",
@@ -69,26 +67,39 @@ function App() {
             fontSize: "1.15rem",
             fontWeight: 700,
             cursor: "pointer",
-            transition: "transform 0.15s ease, box-shadow 0.15s ease",
             boxShadow: "0 8px 24px rgba(66,153,225,0.4)",
             letterSpacing: "0.5px",
-          }}
-          onMouseEnter={(e) => {
-            (e.currentTarget as HTMLButtonElement).style.transform = "translateY(-2px)";
-            (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 12px 32px rgba(66,153,225,0.55)";
-          }}
-          onMouseLeave={(e) => {
-            (e.currentTarget as HTMLButtonElement).style.transform = "translateY(0)";
-            (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 8px 24px rgba(66,153,225,0.4)";
+            display: "block",
+            width: "100%",
+            marginBottom: "1rem",
           }}
         >
           اضغط هنا
         </button>
 
+        <Link
+          to="/upload"
+          style={{
+            display: "block",
+            background: "rgba(255,255,255,0.08)",
+            border: "1px solid rgba(255,255,255,0.15)",
+            color: "#bee3f8",
+            borderRadius: "14px",
+            padding: "0.75rem 2rem",
+            fontSize: "1rem",
+            fontWeight: 600,
+            cursor: "pointer",
+            textDecoration: "none",
+            textAlign: "center",
+          }}
+        >
+          📄 رفع ملف PDF
+        </Link>
+
         {message && (
           <div
             style={{
-              marginTop: "2rem",
+              marginTop: "1.5rem",
               padding: "1rem 1.5rem",
               background: "rgba(99,179,237,0.15)",
               border: "1px solid rgba(99,179,237,0.35)",
@@ -111,6 +122,15 @@ function App() {
         }
       `}</style>
     </div>
+  );
+}
+
+function App() {
+  return (
+    <Switch>
+      <Route path="/upload" component={UploadPage} />
+      <Route path="/" component={HomePage} />
+    </Switch>
   );
 }
 
