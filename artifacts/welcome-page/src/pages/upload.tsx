@@ -8,6 +8,9 @@ pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
 
 const MAX_FILE_MB = 100;
 const MAX_FILE_BYTES = MAX_FILE_MB * 1024 * 1024;
+const DELAY_BETWEEN_PAGES_MS = 4000;
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 const C = {
   bg: "linear-gradient(135deg, #e8f4fb 0%, #fce4f0 50%, #e4f7ec 100%)",
@@ -376,6 +379,7 @@ export default function UploadPage() {
     for (let i = 1; i <= numPages; i++) {
       setBulkProgress({ current: i, total: numPages });
       await explainOnePage(i);
+      if (i < numPages) await sleep(DELAY_BETWEEN_PAGES_MS);
     }
     setBulkProgress(null);
   }, [bulkProgress, numPages, explainOnePage]);
