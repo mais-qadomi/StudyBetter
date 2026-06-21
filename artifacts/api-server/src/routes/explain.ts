@@ -2,79 +2,94 @@ import { Router, type IRouter } from "express";
 
 const router: IRouter = Router();
 
-const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+const TOTAL_TIMEOUT_MS = 50_000;
+const MAX_RETRY_SLEEP_MS = 12_000;
+const MAX_ATTEMPTS = 3;
 
-async function callGroq(apiKey: string, text: string, attempt = 1): Promise<{ language: string; translation: string | null; explanation: string }> {
-  const MAX_ATTEMPTS = 4;
+const systemPrompt = `You are an academic assistant. The user will send you text.
 
-  const systemPrompt = `أنت مساعد أكاديمي متخصص. سيُرسَل إليك نص، وعليك تنفيذ المهام التالية:
+Tasks:
+1. Detect the language (arabic, english, or other).
+2. If English: provide an Arabic translation AND an Arabic academic explanation.
+3. If Arabic or other: provide an Arabic academic explanation only (no translation).
 
-1. حدّد لغة النص (عربية أم إنجليزية أم غيرهما).
-2. إذا كانت اللغة إنجليزية:
-   - قدّم ترجمة دقيقة وحرفية للنص إلى العربية.
-   - قدّم شرحاً أكاديمياً مبسطاً للمحتوى باللغة العربية.
-3. إذا كانت اللغة عربية أو غيرها:
-   - قدّم شرحاً أكاديمياً مبسطاً للمحتوى باللغة العربية فقط (بدون ترجمة).
+Formatting rules (mandatory):
+- Separate each idea or sentence with a blank line.
+- Use bullet points (•) for lists or steps.
 
-قواعد التنسيق الإلزامية:
-- افصل كل فكرة أو نقطة أو جملة مستقلة بسطر فارغ (\\n\\n) عن التي تليها.
-- لا تكتب النص كتلةً واحدة متصلة؛ كل فقرة منفصلة.
-- إذا كان النص يحتوي على قائمة أو خطوات، ضع كل عنصر في سطر جديد مسبوقاً بـ "•".
-
-أجب دائماً بصيغة JSON صحيحة على النحو التالي:
+Always respond in valid JSON with this exact structure:
 {
-  "language": "english" | "arabic" | "other",
-  "translation": "الترجمة هنا (فقط إذا كانت اللغة إنجليزية، وإلا اتركها null)",
-  "explanation": "الشرح الأكاديمي المبسط هنا"
+  "language": "arabic" | "english" | "other",
+  "translation": "Arabic translation here (null if not English)",
+  "explanation": "Arabic academic explanation here"
+}`;
+
+function sleepAbortable(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) { reject(new Error("aborted")); return; }
+    const tid = setTimeout(resolve, ms);
+    signal.addEventListener("abort", () => { clearTimeout(tid); reject(new Error("aborted")); }, { once: true });
+  });
 }
 
-لا تضف أي نص خارج كتلة JSON.`;
+async function callGroq(
+  apiKey: string,
+  text: string,
+  signal: AbortSignal,
+  attempt = 1
+): Promise<{ language: string; translation: string | null; explanation: string }> {
+  if (signal.aborted) throw new Error("انتهت مهلة المعالجة. يرجى المحاولة مجدداً.");
 
-  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: "llama-3.3-70b-versatile",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: text },
-      ],
-      max_tokens: 3000,
-      temperature: 0.5,
-      response_format: { type: "json_object" },
-    }),
-  });
+  let response: Response;
+  try {
+    response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: "llama-3.3-70b-versatile",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: text },
+        ],
+        max_tokens: 1500,
+        temperature: 0.4,
+      }),
+      signal,
+    });
+  } catch (err) {
+    if (err instanceof Error && (err.name === "AbortError" || err.message === "aborted")) {
+      throw new Error("انتهت مهلة الاتصال بـ Groq. يرجى المحاولة مجدداً.");
+    }
+    throw err;
+  }
 
   if (response.status === 429) {
     if (attempt >= MAX_ATTEMPTS) {
-      throw new Error("تجاوز الحد المسموح به من الطلبات (rate limit). يرجى الانتظار قليلاً ثم المحاولة مجدداً.");
+      throw new Error("تجاوز الحد المسموح به من الطلبات. يرجى الانتظار دقيقة ثم المحاولة.");
     }
-
-    // Parse retry-after from header or body
     const retryAfterHeader = response.headers.get("retry-after");
-    let waitMs = 10_000; // default 10s
-
+    let waitMs = 8_000;
     if (retryAfterHeader) {
       const secs = parseFloat(retryAfterHeader);
-      if (!isNaN(secs)) waitMs = Math.ceil(secs) * 1000 + 500;
+      if (!isNaN(secs)) waitMs = Math.min(Math.ceil(secs) * 1000 + 500, MAX_RETRY_SLEEP_MS);
     } else {
       try {
         const body = await response.json() as { error?: { message?: string } };
         const msg = body?.error?.message ?? "";
         const match = /try again in ([\d.]+)s/i.exec(msg);
-        if (match) waitMs = Math.ceil(parseFloat(match[1])) * 1000 + 500;
-      } catch { /* ignore parse errors */ }
+        if (match) waitMs = Math.min(Math.ceil(parseFloat(match[1])) * 1000 + 500, MAX_RETRY_SLEEP_MS);
+      } catch { /* ignore */ }
     }
-
-    await sleep(waitMs);
-    return callGroq(apiKey, text, attempt + 1);
+    await sleepAbortable(waitMs, signal);
+    return callGroq(apiKey, text, signal, attempt + 1);
   }
 
   if (!response.ok) {
-    const errBody = await response.text();
+    let errBody = "";
+    try { errBody = await response.text(); } catch { /* ignore */ }
     throw new Error(`خطأ من Groq (${response.status}): ${errBody.slice(0, 300)}`);
   }
 
@@ -111,12 +126,17 @@ router.post("/explain", async (req, res) => {
     return;
   }
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), TOTAL_TIMEOUT_MS);
+
   try {
-    const result = await callGroq(apiKey, text);
+    const result = await callGroq(apiKey, text, controller.signal);
+    clearTimeout(timeoutId);
     res.json(result);
   } catch (err: unknown) {
+    clearTimeout(timeoutId);
     const message = err instanceof Error ? err.message : "خطأ غير معروف";
-    req.log.error({ err }, "Groq error");
+    req.log.error({ err, message }, "Groq API call failed");
     res.status(502).json({ error: message });
   }
 });
