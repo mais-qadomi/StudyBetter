@@ -218,13 +218,23 @@ function FormattedText({ text, color }: { text: string; color: string }) {
 }
 
 async function callExplain(text: string): Promise<PageResultUI> {
-  const res = await fetch("/api/explain", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text }),
-  });
-  const data = await res.json() as { explanation?: string; translation?: string | null; error?: string };
-  if (!res.ok) throw new Error(data.error ?? "خطأ غير معروف");
+  let res: Response;
+  try {
+    res = await fetch("/api/explain", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+  } catch {
+    throw new Error("فشل الاتصال بالخادم. تحقق من الاتصال بالإنترنت.");
+  }
+  let data: { explanation?: string; translation?: string | null; error?: string };
+  try {
+    data = await res.json() as typeof data;
+  } catch {
+    throw new Error(`استجابة غير صالحة من الخادم (${res.status}). حاول مجدداً.`);
+  }
+  if (!res.ok) throw new Error(data.error ?? "خطأ غير معروف من الخادم");
   return {
     translation: data.translation ?? null,
     explanation: data.explanation ?? "",
@@ -455,9 +465,28 @@ export default function UploadPage() {
     }
   }, []);
 
+  const waitForPageText = useCallback(async (pageNum: number, maxWaitMs = 12000): Promise<string | null> => {
+    const start = Date.now();
+    while (Date.now() - start < maxWaitMs) {
+      const t = pageTextsRef.current[pageNum];
+      if (t) return t;
+      await sleep(400);
+    }
+    return null;
+  }, []);
+
   const explainOnePage = useCallback(async (pageNum: number) => {
-    const text = pageTextsRef.current[pageNum];
-    if (!text) return;
+    let text = pageTextsRef.current[pageNum];
+    if (!text) {
+      text = await waitForPageText(pageNum) ?? "";
+    }
+    if (!text) {
+      setPageResults(prev => ({
+        ...prev,
+        [pageNum]: { translation: null, explanation: "", error: "لم يُستخرج نص من هذه الصفحة. قد تكون الصفحة صورة فقط." },
+      }));
+      return;
+    }
     setExplaining(prev => new Set(prev).add(pageNum));
     try {
       const result = await callExplain(text);
@@ -477,26 +506,20 @@ export default function UploadPage() {
     } finally {
       setExplaining(prev => { const s = new Set(prev); s.delete(pageNum); return s; });
     }
-  }, []);
+  }, [waitForPageText]);
 
   const handleExplainAll = useCallback(async () => {
     if (bulkProgress || numPages === 0) return;
-    const skipped: number[] = [];
     const toProcess: number[] = [];
     for (let i = 1; i <= numPages; i++) {
-      if (pageResults[i]?.explanation) {
-        skipped.push(i);
-      } else {
-        toProcess.push(i);
-      }
+      if (!pageResults[i]?.explanation) toProcess.push(i);
     }
     if (toProcess.length === 0) return;
-    let done = 0;
-    for (const pageNum of toProcess) {
-      done++;
-      setBulkProgress({ current: done, total: toProcess.length });
+    for (let idx = 0; idx < toProcess.length; idx++) {
+      const pageNum = toProcess[idx];
+      setBulkProgress({ current: idx + 1, total: toProcess.length });
       await explainOnePage(pageNum);
-      if (done < toProcess.length) await sleep(DELAY_BETWEEN_PAGES_MS);
+      if (idx < toProcess.length - 1) await sleep(DELAY_BETWEEN_PAGES_MS);
     }
     setBulkProgress(null);
   }, [bulkProgress, numPages, pageResults, explainOnePage]);

@@ -6,19 +6,24 @@ const router: IRouter = Router();
 
 router.get("/sessions/:id", async (req, res) => {
   const { id } = req.params;
-  const session = await db.query.sessionsTable.findFirst({
-    where: eq(sessionsTable.id, id),
-  });
-  if (!session) {
-    res.status(404).json({ error: "session not found" });
-    return;
+  try {
+    const session = await db.query.sessionsTable.findFirst({
+      where: eq(sessionsTable.id, id),
+    });
+    if (!session) {
+      res.status(404).json({ error: "session not found" });
+      return;
+    }
+    const pages = await db
+      .select()
+      .from(pageResultsTable)
+      .where(eq(pageResultsTable.sessionId, id))
+      .orderBy(pageResultsTable.pageNumber);
+    res.json({ session, pages });
+  } catch (err) {
+    req.log.error({ err }, "GET /sessions/:id failed");
+    res.status(500).json({ error: "database error" });
   }
-  const pages = await db
-    .select()
-    .from(pageResultsTable)
-    .where(eq(pageResultsTable.sessionId, id))
-    .orderBy(pageResultsTable.pageNumber);
-  res.json({ session, pages });
 });
 
 router.post("/sessions", async (req, res) => {
@@ -32,23 +37,28 @@ router.post("/sessions", async (req, res) => {
     res.status(400).json({ error: "sessionId and fileName required" });
     return;
   }
-  const existing = await db.query.sessionsTable.findFirst({
-    where: eq(sessionsTable.id, sessionId),
-  });
-  if (existing) {
-    const [updated] = await db
-      .update(sessionsTable)
-      .set({ fileName, fileSize, numPages })
-      .where(eq(sessionsTable.id, sessionId))
+  try {
+    const existing = await db.query.sessionsTable.findFirst({
+      where: eq(sessionsTable.id, sessionId),
+    });
+    if (existing) {
+      const [updated] = await db
+        .update(sessionsTable)
+        .set({ fileName, fileSize, numPages })
+        .where(eq(sessionsTable.id, sessionId))
+        .returning();
+      res.json(updated);
+      return;
+    }
+    const [created] = await db
+      .insert(sessionsTable)
+      .values({ id: sessionId, fileName, fileSize, numPages })
       .returning();
-    res.json(updated);
-    return;
+    res.json(created);
+  } catch (err) {
+    req.log.error({ err }, "POST /sessions failed");
+    res.status(500).json({ error: "database error" });
   }
-  const [created] = await db
-    .insert(sessionsTable)
-    .values({ id: sessionId, fileName, fileSize, numPages })
-    .returning();
-  res.json(created);
 });
 
 router.put("/sessions/:id/pages/:pageNum", async (req, res) => {
@@ -63,47 +73,64 @@ router.put("/sessions/:id/pages/:pageNum", async (req, res) => {
     res.status(400).json({ error: "invalid page number" });
     return;
   }
-  const existing = await db.query.pageResultsTable.findFirst({
-    where: and(
-      eq(pageResultsTable.sessionId, id),
-      eq(pageResultsTable.pageNumber, pageNumber)
-    ),
-  });
-  if (existing) {
-    const [updated] = await db
-      .update(pageResultsTable)
-      .set({
-        ...(extractedText !== undefined && { extractedText }),
-        ...(translation !== undefined && { translation }),
-        ...(explanation !== undefined && { explanation }),
-      })
-      .where(
-        and(
-          eq(pageResultsTable.sessionId, id),
-          eq(pageResultsTable.pageNumber, pageNumber)
+  try {
+    const sessionExists = await db.query.sessionsTable.findFirst({
+      where: eq(sessionsTable.id, id),
+    });
+    if (!sessionExists) {
+      res.status(404).json({ error: "session not found" });
+      return;
+    }
+    const existing = await db.query.pageResultsTable.findFirst({
+      where: and(
+        eq(pageResultsTable.sessionId, id),
+        eq(pageResultsTable.pageNumber, pageNumber)
+      ),
+    });
+    if (existing) {
+      const [updated] = await db
+        .update(pageResultsTable)
+        .set({
+          ...(extractedText !== undefined && { extractedText }),
+          ...(translation !== undefined && { translation }),
+          ...(explanation !== undefined && { explanation }),
+        })
+        .where(
+          and(
+            eq(pageResultsTable.sessionId, id),
+            eq(pageResultsTable.pageNumber, pageNumber)
+          )
         )
-      )
+        .returning();
+      res.json(updated);
+      return;
+    }
+    const [created] = await db
+      .insert(pageResultsTable)
+      .values({
+        sessionId: id,
+        pageNumber,
+        extractedText: extractedText ?? "",
+        translation: translation ?? null,
+        explanation: explanation ?? null,
+      })
       .returning();
-    res.json(updated);
-    return;
+    res.json(created);
+  } catch (err) {
+    req.log.error({ err }, "PUT /sessions/:id/pages/:pageNum failed");
+    res.status(500).json({ error: "database error" });
   }
-  const [created] = await db
-    .insert(pageResultsTable)
-    .values({
-      sessionId: id,
-      pageNumber,
-      extractedText: extractedText ?? "",
-      translation: translation ?? null,
-      explanation: explanation ?? null,
-    })
-    .returning();
-  res.json(created);
 });
 
 router.delete("/sessions/:id", async (req, res) => {
   const { id } = req.params;
-  await db.delete(sessionsTable).where(eq(sessionsTable.id, id));
-  res.json({ ok: true });
+  try {
+    await db.delete(sessionsTable).where(eq(sessionsTable.id, id));
+    res.json({ ok: true });
+  } catch (err) {
+    req.log.error({ err }, "DELETE /sessions/:id failed");
+    res.status(500).json({ error: "database error" });
+  }
 });
 
 export default router;
