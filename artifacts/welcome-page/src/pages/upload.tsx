@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
-import { useLocation } from "wouter";
+import { useRoute, useLocation } from "wouter";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
 import {
@@ -13,39 +13,54 @@ import {
   apiSaveSession,
   apiSavePage,
   apiDeleteSession,
+  apiGetProjects,
+  apiGetProject,
+  apiAssignSessionToProject,
+  apiAssignSessionToFolder,
+  cacheSessionInProject,
   type StoredPageResult,
+  type StoredSession,
+  type Project,
+  type Folder,
 } from "../lib/storage";
+import { callExplain, type PageResultUI } from "../lib/explain";
+import { classifyPage, capturePageCanvas, type PageType } from "../lib/pdf-page-analyzer";
+import { Folder as FolderIcon, FolderOpen as FolderOpenIcon, ChevronLeft, Loader2, Trash2, CheckCircle, Rocket, AlertTriangle, FileUp, Paperclip, Globe, GraduationCap, RefreshCw, Sparkles, ArrowRight, Lightbulb, StickyNote, TriangleAlert, Zap, Image } from "lucide-react";
+import { useApp } from "../App";
 
 pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
 
 const MAX_FILE_MB = 100;
 const MAX_FILE_BYTES = MAX_FILE_MB * 1024 * 1024;
-const DELAY_BETWEEN_PAGES_MS = 4000;
+const DELAY_BETWEEN_PAGES_MS = 6000;
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
-
 const C = {
-  bg: "linear-gradient(135deg, #e8f4fb 0%, #fce4f0 50%, #e4f7ec 100%)",
-  card: "#ffffff",
-  cardBorder: "#d8eaf7",
-  title: "#5a8fc7",
-  backBtn: { bg: "#d0e8f8", border: "#a8d0f0", color: "#3a7abf" },
-  drop: { border: "#a8d0f0", borderActive: "#f0a8c8", bg: "rgba(168,208,240,0.12)", bgActive: "rgba(240,168,200,0.12)" },
-  dropText: "#6a9ec0",
-  dropSub: "#a8c8e0",
-  uploadBtn: { bg: "linear-gradient(135deg, #a8d8f0, #88bce8)", shadow: "rgba(136,188,232,0.45)" },
-  fileName: "#8aa8c8",
-  pageLabel: "#b8a8d0",
-  textBox: { bg: "#f5fbff", border: "#c8e0f4", color: "#4a7a9b", label: "#b0c8e0" },
-  loadingText: "#8ab8d8",
-  errorText: "#e08898",
+  bg: "var(--app-bg-page-alt)",
+  card: "var(--app-card)",
+  cardBorder: "var(--app-card-border)",
+  title: "var(--app-primary)",
+  backBtn: { bg: "var(--app-accent-bg)", border: "var(--app-accent-light)", color: "var(--app-primary)" },
+  drop: { border: "var(--app-primary-light)", borderActive: "var(--app-primary-light)", bg: "var(--app-accent-bg)", bgActive: "var(--app-accent-bg)" },
+  dropText: "var(--app-primary)",
+  dropSub: "var(--app-muted)",
+  uploadBtn: { bg: "linear-gradient(135deg, var(--app-primary-light), var(--app-primary))", shadow: "rgba(99,102,241,0.45)" },
+  fileName: "var(--app-text)",
+  pageLabel: "var(--app-accent)",
+  textBox: { bg: "var(--app-primary-bg-light)", border: "var(--app-card-border)", color: "var(--app-text)", label: "var(--app-muted)" },
+  loadingText: "var(--app-primary)",
+  errorText: "var(--app-red)",
+  accent: "var(--app-accent)",
+  accentBg: "var(--app-accent-bg)",
+  accentLight: "var(--app-accent-light)",
+  text: "var(--app-text)",
+  muted: "var(--app-muted)",
 };
-
 const S = {
   page: {
     minHeight: "100vh",
     background: C.bg,
-    fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
+    fontFamily: "'Segoe UI', Tahoma, sans-serif",
     display: "flex",
     flexDirection: "column" as const,
     alignItems: "center",
@@ -177,7 +192,7 @@ const S = {
     boxSizing: "border-box" as const,
     minHeight: "80px",
     padding: "0.6rem 0.8rem",
-    background: "#fff",
+    background: "var(--app-card)",
     border: `1px solid ${C.textBox.border}`,
     borderRadius: "8px",
     fontSize: "0.82rem",
@@ -190,56 +205,112 @@ const S = {
   loadingText: { color: C.loadingText, fontSize: "1rem", marginTop: "3rem" },
 };
 
-type PageResultUI = {
-  translation: string | null;
-  explanation: string;
-  error: string;
-};
-
-function FormattedText({ text, color }: { text: string; color: string }) {
-  const paragraphs = text
-    .split(/\n\n+/)
-    .map((p) => p.trim())
-    .filter(Boolean);
-  return (
-    <div style={{ direction: "rtl" }}>
-      {paragraphs.map((para, idx) => (
-        <p key={idx} style={{
-          margin: idx < paragraphs.length - 1 ? "0 0 0.75rem" : "0",
-          fontSize: "0.88rem",
-          lineHeight: 1.9,
-          color,
-        }}>
-          {para}
-        </p>
-      ))}
-    </div>
-  );
+function parseInline(text: string): React.ReactNode[] {
+  const parts = text.split(/(\[EN\].*?\[\/EN\]|\[EX\].*?\[\/EX\])/gs);
+  return parts.map((part, i) => {
+    const enMatch = /\[EN\](.*?)\[\/EN\]/s.exec(part);
+    if (enMatch) return (
+      <span key={i} style={{
+        background: "var(--app-content-en-bg)", color: "var(--app-content-en-text)",
+        borderRadius: "5px", padding: "1px 7px",
+        fontSize: "0.82rem", fontWeight: 600,
+        direction: "ltr", display: "inline-block",
+        margin: "0 2px",
+      }}>{enMatch[1].trim()}</span>
+    );
+    const exMatch = /\[EX\](.*?)\[\/EX\]/s.exec(part);
+    if (exMatch) return (
+      <span key={i} style={{
+        background: "var(--app-content-example-bg)", color: "var(--app-content-example-text)",
+        borderRadius: "6px", padding: "2px 8px",
+        fontSize: "0.82rem", fontStyle: "italic",
+        display: "inline",
+      }}><Lightbulb size={14} style={{ display: "inline", verticalAlign: "middle" }} /> {exMatch[1].trim()}</span>
+    );
+    return <span key={i}>{part}</span>;
+  });
 }
 
-async function callExplain(text: string): Promise<PageResultUI> {
-  let res: Response;
-  try {
-    res = await fetch("/api/explain", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text }),
-    });
-  } catch {
-    throw new Error("فشل الاتصال بالخادم. تحقق من الاتصال بالإنترنت.");
-  }
-  let data: { explanation?: string; translation?: string | null; error?: string };
-  try {
-    data = await res.json() as typeof data;
-  } catch {
-    throw new Error(`استجابة غير صالحة من الخادم (${res.status}). حاول مجدداً.`);
-  }
-  if (!res.ok) throw new Error(data.error ?? "خطأ غير معروف من الخادم");
-  return {
-    translation: data.translation ?? null,
-    explanation: data.explanation ?? "",
-    error: "",
-  };
+function FormattedText({ text }: { text: string }) {
+  const cleaned = text.replace(/[^\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFFa-zA-Z0-9\s\[\]\/\.\,\:\;\!\?\(\)\-\/\+\=\%\*\n📌⚡🔹💡📝]/g, "");
+  const blocks = cleaned.split(/(\[H\].*?\[\/H\]|\[NOTE\].*?\[\/NOTE\]|\[PIN\].*?\[\/PIN\]|\[SUM\].*?\[\/SUM\])/gs); return (
+    <div style={{ direction: "rtl", fontFamily: "'Segoe UI', Tahoma, sans-serif" }}>
+      {blocks.map((block, idx) => {
+        const hMatch = /\[H\](.*?)\[\/H\]/s.exec(block);
+        if (hMatch) return (
+          <div key={idx} style={{
+            display: "flex", alignItems: "center", gap: "8px",
+            margin: "1.2rem 0 0.6rem",
+            paddingBottom: "0.5rem",
+            borderBottom: "1.5px solid var(--app-content-heading-border)",
+          }}>
+            <div style={{
+              width: "26px", height: "26px", borderRadius: "50%",
+              background: "var(--app-content-heading-bg)", color: "#fff",
+              fontSize: "0.75rem", fontWeight: 700,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              flexShrink: 0,
+            }}><ChevronLeft size={16} /></div>
+            <p style={{ margin: 0, fontSize: "1rem", fontWeight: 700, color: "var(--app-content-heading-text)" }}>
+              {parseInline(hMatch[1].trim())}
+            </p>
+          </div>
+        );
+
+        const noteMatch = /\[NOTE\](.*?)\[\/NOTE\]/s.exec(block);
+        if (noteMatch) return (
+          <div key={idx} style={{
+            background: "var(--app-content-note-bg)", border: "0.5px solid var(--app-content-note-border)",
+            borderRadius: "10px", padding: "0.7rem 1rem",
+            margin: "0.6rem 0", fontSize: "0.85rem",
+            color: "var(--app-content-note-text)", lineHeight: 1.8,
+          }}>
+            <strong style={{ color: "var(--app-content-note-strong)", display: "inline-flex", alignItems: "center", gap: "4px" }}><StickyNote size={16} /> ملاحظة: </strong>
+            {parseInline(noteMatch[1].trim())}
+          </div>
+        );
+
+        const pinMatch = /\[PIN\](.*?)\[\/PIN\]/s.exec(block);
+        if (pinMatch) return (
+          <div key={idx} style={{
+            background: "var(--app-content-exam-bg)",
+            borderRight: "3px solid var(--app-content-exam-border)",
+            borderRadius: "0 10px 10px 0",
+            padding: "0.7rem 1rem",
+            margin: "0.6rem 0", fontSize: "0.85rem",
+            color: "var(--app-content-exam-text)", lineHeight: 1.8,
+          }}>
+            <strong style={{ color: "var(--app-content-exam-strong)", display: "inline-flex", alignItems: "center", gap: "4px" }}><TriangleAlert size={16} /> تنبيه امتحان: </strong>
+            {parseInline(pinMatch[1].trim())}
+          </div>
+        );
+
+        const sumMatch = /\[SUM\](.*?)\[\/SUM\]/s.exec(block);
+        if (sumMatch) return (
+          <div key={idx} style={{
+            background: "var(--app-content-summary-bg)", border: "0.5px solid var(--app-content-summary-border)",
+            borderRadius: "12px", padding: "1rem 1.2rem",
+            margin: "1rem 0",
+          }}>
+            <p style={{ margin: "0 0 0.6rem", fontSize: "0.9rem", fontWeight: 700, color: "var(--app-content-summary-text)", display: "flex", alignItems: "center", gap: "6px" }}><Zap size={18} /> ملخص سريع</p>
+            {sumMatch[1].trim().split(/\n|•|\*/).filter(s => s.trim()).map((item, i) => (
+              <div key={i} style={{ display: "flex", gap: "8px", marginBottom: "0.3rem", fontSize: "0.84rem", color: "var(--app-content-summary-item)" }}>
+                <span style={{ color: "var(--app-content-summary-bullet)", flexShrink: 0 }}>▸</span>
+                <span>{parseInline(item.trim())}</span>
+              </div>
+            ))}
+          </div>
+        );
+
+        if (!block.trim()) return null;
+        return (
+          <p key={idx} style={{ margin: "0 0 0.6rem", fontSize: "0.88rem", lineHeight: 1.9, color: "var(--app-content-paragraph)" }}>
+            {parseInline(block)}
+          </p>
+        );
+      })}
+    </div>
+  );
 }
 
 function PageWithText({
@@ -253,100 +324,122 @@ function PageWithText({
   result: PageResultUI | null;
   explaining: boolean;
   savedText: string;
-  onTextReady: (pageNum: number, text: string) => void;
-  onExplain: (pageNum: number) => void;
+  onTextReady: (pageNum: number, text: string, pageType?: PageType, imageDataUrl?: string) => void;
+  onExplain: (pageNum: number, imageDataUrl?: string) => void;
 }) {
   const [text, setText] = useState<string>(savedText);
+  const [pageType, setPageType] = useState<PageType | null>(null);
+  const imageDataRef = useRef<string | null>(null);
+  const pageWrapperRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (savedText && !text) {
-      setText(savedText);
-    }
+    if (savedText && !text) setText(savedText);
   }, [savedText]);
 
   const handlePageLoad = useCallback(async (page: pdfjs.PDFPageProxy) => {
     try {
+      const analysis = await classifyPage(page, pageNumber);
+      setPageType(analysis.type);
       const content = await page.getTextContent();
       const extracted = content.items
         .map((item) => ("str" in item ? item.str : ""))
         .join(" ")
+        .replace(/[^\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFFa-zA-Z0-9\s\.\,\:\;\!\?\(\)\-\/\+\=\%\@\#\$\&\*\[\]\{\}\"\'\\n]/g, " ")
         .replace(/\s+/g, " ")
         .trim();
       setText(extracted);
-      onTextReady(pageNumber, extracted);
+      onTextReady(pageNumber, extracted, analysis.type, undefined);
     } catch {
       const fallback = "تعذّر استخراج النص من هذه الصفحة.";
       setText(fallback);
-      onTextReady(pageNumber, fallback);
+      setPageType("image");
+      onTextReady(pageNumber, fallback, "image", undefined);
     }
   }, [pageNumber, onTextReady]);
 
+  const handleRenderSuccess = useCallback(() => {
+    if (pageWrapperRef.current) {
+      imageDataRef.current = capturePageCanvas(pageWrapperRef.current);
+    }
+  }, []);
+
   const displayText = text || savedText;
+  const isVision = pageType === "image" || pageType === "mixed";
 
   return (
     <div style={S.pageCard}>
-      <p style={S.pageLabel}>صفحة {pageNumber} من {numPages}</p>
-      <Page
-        pageNumber={pageNumber}
-        width={width}
-        renderTextLayer
-        renderAnnotationLayer
-        onLoadSuccess={handlePageLoad}
-      />
+      <p style={S.pageLabel}>
+        صفحة {pageNumber} من {numPages}
+        {pageType === "image" && <span style={{ marginRight: "8px", background: "var(--app-accent-bg)", color: "var(--app-accent)", padding: "1px 6px", borderRadius: "4px", fontSize: "0.7rem", fontWeight: 700 }}><Image size={12} style={{ verticalAlign: "middle" }} /> صورة</span>}
+        {pageType === "mixed" && <span style={{ marginRight: "8px", background: "var(--app-accent-bg)", color: "var(--app-accent)", padding: "1px 6px", borderRadius: "4px", fontSize: "0.7rem", fontWeight: 700 }}><Image size={12} style={{ verticalAlign: "middle" }} /> مختلط</span>}
+      </p>
+      <div ref={pageWrapperRef}>
+        <Page
+          pageNumber={pageNumber}
+          width={width}
+          renderTextLayer
+          renderAnnotationLayer
+          onLoadSuccess={handlePageLoad}
+          onRenderSuccess={handleRenderSuccess}
+        />
+      </div>
       <div style={S.textBox}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.5rem" }}>
           <p style={{ ...S.textLabel, margin: 0 }}>النص المستخرج</p>
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
             {result?.explanation && !explaining && (
-              <span style={{ fontSize: "0.72rem", color: "#7ab87a", fontWeight: 700 }}>✓ محفوظ</span>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", fontSize: "0.72rem", color: "var(--app-green)", fontWeight: 700 }}><CheckCircle size={14} /> محفوظ</span>
             )}
             <button
-              onClick={() => onExplain(pageNumber)}
-              disabled={!displayText || explaining}
+              onClick={() => {
+                if (!imageDataRef.current && pageWrapperRef.current) imageDataRef.current = capturePageCanvas(pageWrapperRef.current);
+                onExplain(pageNumber, imageDataRef.current ?? undefined);
+              }}
+              disabled={(!displayText && !isVision) || explaining}
               style={{
                 background: explaining
-                  ? "rgba(200,168,240,0.4)"
-                  : "linear-gradient(135deg, #d0b8f0, #b89ce8)",
+                  ? "var(--app-accent-bg)"
+                  : "linear-gradient(135deg, var(--app-accent-light), var(--app-accent))",
                 color: "#fff",
                 border: "none",
                 borderRadius: "8px",
                 padding: "0.35rem 0.9rem",
                 fontSize: "0.8rem",
                 fontWeight: 700,
-                cursor: displayText && !explaining ? "pointer" : "not-allowed",
-                boxShadow: "0 3px 12px rgba(176,140,232,0.35)",
+                cursor: (!displayText && !isVision) || explaining ? "not-allowed" : "pointer",
+                boxShadow: "0 3px 12px rgba(99,102,241,0.35)",
                 whiteSpace: "nowrap" as const,
               }}
             >
-              {explaining ? "⏳ جاري الشرح…" : result?.explanation ? "🔄 أعد الشرح" : "✨ اشرح هذا المحتوى"}
+              {explaining ? <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}><Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> جاري الشرح…</span> : result?.explanation ? <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}><RefreshCw size={14} /> أعد الشرح</span> : <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}><Sparkles size={14} /> {isVision ? "اشرح بالصورة" : "اشرح هذا المحتوى"}</span>}
             </button>
           </div>
         </div>
 
         <textarea
           readOnly
-          value={displayText || "جاري استخراج النص…"}
+          value={displayText || (isVision ? "(هذه الصفحة تحتوي على صور — سيتم تحليلها كصورة)" : "جاري استخراج النص…")}
           style={S.textArea}
         />
 
         {result?.error && (
-          <div style={{ marginTop: "0.8rem", padding: "0.9rem 1rem", background: "#fff0f0", border: "1px solid #f0c0c0", borderRadius: "8px" }}>
-            <p style={{ ...S.textLabel, margin: "0 0 0.4rem", color: "#c06060" }}>خطأ</p>
-            <p style={{ margin: 0, fontSize: "0.88rem", lineHeight: 1.8, color: "#c06060", direction: "rtl" }}>{result.error}</p>
+          <div style={{ marginTop: "0.8rem", padding: "0.9rem 1rem", background: "var(--app-error-bg)", border: "1px solid var(--app-error-border)", borderRadius: "8px" }}>
+            <p style={{ ...S.textLabel, margin: "0 0 0.4rem", color: "var(--app-error-text)" }}>خطأ</p>
+            <p style={{ margin: 0, fontSize: "0.88rem", lineHeight: 1.8, color: "var(--app-error-text)", direction: "rtl" }}>{result.error}</p>
           </div>
         )}
 
         {result?.translation && (
-          <div style={{ marginTop: "0.8rem", padding: "0.9rem 1rem", background: "#f5f0ff", border: "1px solid #d0b8f0", borderRadius: "8px" }}>
-            <p style={{ ...S.textLabel, margin: "0 0 0.6rem", color: "#8060c0" }}>🌐 الترجمة</p>
-            <FormattedText text={result.translation} color="#4a3a7a" />
+          <div style={{ marginTop: "0.8rem", padding: "0.9rem 1rem", background: "var(--app-content-summary-bg)", border: "1px solid var(--app-content-summary-border)", borderRadius: "8px" }}>
+            <p style={{ ...S.textLabel, margin: "0 0 0.6rem", color: "var(--app-content-summary-text)", display: "flex", alignItems: "center", gap: "6px" }}><Globe size={14} /> الترجمة</p>
+            <FormattedText text={result.translation} />
           </div>
         )}
 
         {result?.explanation && (
-          <div style={{ marginTop: "0.8rem", padding: "0.9rem 1rem", background: "#f0f8ff", border: "1px solid #c0d8f0", borderRadius: "8px" }}>
-            <p style={{ ...S.textLabel, margin: "0 0 0.6rem", color: "#5070c0" }}>🎓 الشرح الأكاديمي</p>
-            <FormattedText text={result.explanation} color="#3a4a7a" />
+          <div style={{ marginTop: "0.8rem", padding: "0.9rem 1rem", background: "var(--app-content-example-bg)", border: "1px solid var(--app-content-example-border)", borderRadius: "8px" }}>
+            <p style={{ ...S.textLabel, margin: "0 0 0.6rem", color: "var(--app-content-example-text)", display: "flex", alignItems: "center", gap: "6px" }}><GraduationCap size={14} /> الشرح الأكاديمي</p>
+            <FormattedText text={result.explanation} />
           </div>
         )}
       </div>
@@ -354,8 +447,139 @@ function PageWithText({
   );
 }
 
+function ProjectTree({
+  projects, selectedProjectId, selectedFolderId,
+  expandedProjects, projectFolders, loadingFolders,
+  onToggleProject, onSelectProject, onSelectFolder,
+}: {
+  projects: Project[];
+  selectedProjectId: string;
+  selectedFolderId: string;
+  expandedProjects: Set<string>;
+  projectFolders: Record<string, Folder[]>;
+  loadingFolders: Set<string>;
+  onToggleProject: (id: string) => void;
+  onSelectProject: (id: string) => void;
+  onSelectFolder: (projectId: string, folderId: string) => void;
+}) {
+  const treeStyle: React.CSSProperties = {
+    width: "100%", maxWidth: "860px", marginBottom: "1rem",
+  };
+  const headerStyle: React.CSSProperties = {
+    fontSize: "0.9rem", fontWeight: 700, color: C.title,
+    display: "block", marginBottom: "0.5rem",
+  };
+  const projectBtnStyle = (active: boolean): React.CSSProperties => ({
+    display: "flex", alignItems: "center", gap: "6px",
+    width: "100%", padding: "0.5rem 0.8rem",
+    border: active ? "2px solid " + C.accent : "1.5px solid var(--app-card-border)",
+    borderRadius: "8px", background: active ? C.accentBg : "var(--app-card)",
+    cursor: "pointer", fontSize: "0.85rem", fontFamily: "inherit",
+    fontWeight: active ? 700 : 500, color: C.title,
+    textAlign: "right", transition: "all 0.12s",
+    boxSizing: "border-box" as const,
+  });
+  const folderBtnStyle = (active: boolean, depth: number): React.CSSProperties => ({
+    display: "flex", alignItems: "center", gap: "5px",
+    width: "100%", padding: "0.35rem 0.7rem",
+    marginRight: (depth * 1.5) + "rem",
+    border: active ? "2px solid " + C.accentLight : "none",
+    borderRadius: "6px", background: active ? C.accentBg : "transparent",
+    cursor: "pointer", fontSize: "0.8rem", fontFamily: "inherit",
+    fontWeight: active ? 600 : 400, color: active ? C.accent : C.text,
+    textAlign: "right", transition: "all 0.12s",
+    boxSizing: "border-box" as const,
+  });
+  const expandBtn: React.CSSProperties = {
+    background: "none", border: "none", cursor: "pointer",
+    fontSize: "0.7rem", color: C.muted, padding: "0 4px",
+    fontFamily: "inherit",
+  };
+
+  return (
+    <div style={treeStyle}>
+      <span style={{ ...headerStyle, display: "inline-flex", alignItems: "center", gap: "6px" }}><FolderIcon size={18} /> اختاري مشروعاً (اختياري)</span>
+      <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+        <button
+          onClick={() => onSelectProject("")}
+          style={projectBtnStyle(selectedProjectId === "" && selectedFolderId === "")}
+        >
+          <FolderOpenIcon size={18} />
+          <span>— بدون مشروع —</span>
+        </button>
+        {projects.map(p => {
+          const isExpanded = expandedProjects.has(p.id);
+          const folders = projectFolders[p.id];
+          const isLoading = loadingFolders.has(p.id);
+          const hasFolders = folders && folders.length > 0;
+          const projectSelected = selectedProjectId === p.id && !selectedFolderId;
+          return (
+            <div key={p.id}>
+              <div style={{ display: "flex", alignItems: "center", gap: "2px" }}>
+                <button
+                  onClick={(e) => { e.stopPropagation(); onToggleProject(p.id); }}
+                  style={{
+                    ...expandBtn,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <ChevronLeft size={18} style={{ transform: isExpanded ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.15s" }} />
+                </button>
+                <button
+                  onClick={() => onSelectProject(p.id)}
+                  style={{ ...projectBtnStyle(projectSelected), border: projectSelected ? "2px solid " + C.accent : "1.5px solid var(--app-card-border)" }}
+                  onMouseOver={e => { if (!projectSelected) e.currentTarget.style.borderColor = C.accentLight; }}
+                  onMouseOut={e => { if (!projectSelected) e.currentTarget.style.borderColor = "var(--app-card-border)"; }}
+                >
+                  <FolderIcon size={18} />
+                  <span>{p.name}</span>
+                  {hasFolders && <span style={{ fontSize: "0.68rem", color: C.muted, background: "var(--app-bg)", padding: "0 6px", borderRadius: "6px" }}>{folders.length}</span>}
+                  {isLoading && <Loader2 size={14} style={{ animation: "spin 1s linear infinite", color: C.muted }} />}
+                </button>
+              </div>
+              {isExpanded && (
+                <div style={{ marginTop: "3px" }}>
+                  {isLoading && !folders && (
+                    <p style={{ margin: "0.2rem 1.5rem", fontSize: "0.75rem", color: C.muted, display: "flex", alignItems: "center", gap: "6px" }}><Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> جاري تحميل المجلدات…</p>
+                  )}
+                  {!isLoading && folders && folders.length === 0 && (
+                    <p style={{ margin: "0.2rem 1.5rem", fontSize: "0.75rem", color: C.muted }}>لا توجد مجلدات</p>
+                  )}
+                  {hasFolders && folders
+                    .sort((a, b) => a.order - b.order)
+                    .map(f => (
+                      <button
+                        key={f.id}
+                        onClick={() => onSelectFolder(p.id, f.id)}
+                        style={folderBtnStyle(selectedFolderId === f.id, 1)}
+                        onMouseOver={e => { if (selectedFolderId !== f.id) e.currentTarget.style.background = C.accentBg + "60"; }}
+                        onMouseOut={e => { if (selectedFolderId !== f.id) e.currentTarget.style.background = "transparent"; }}
+                      >
+                        <FolderOpenIcon size={16} />
+                        <span>{f.name}</span>
+                      </button>
+                    ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function UploadPage() {
   const [, navigate] = useLocation();
+  const [, params] = useRoute("/upload/:sessionId?");
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<string>("");
+  const [selectedFolderId, setSelectedFolderId] = useState<string>("");
+  const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
+  const [projectFolders, setProjectFolders] = useState<Record<string, Folder[]>>({});
+  const [loadingFolders, setLoadingFolders] = useState<Set<string>>(new Set());
   const [file, setFile] = useState<File | null>(null);
   const [fileUrl, setFileUrl] = useState<string | null>(null);
   const [fileError, setFileError] = useState<string>("");
@@ -371,11 +595,21 @@ export default function UploadPage() {
   const [bulkProgress, setBulkProgress] = useState<{ current: number; total: number } | null>(null);
 
   const pageTextsRef = useRef<Record<number, string>>({});
-
+  useEffect(() => {
+    void apiGetProjects().then(list => {
+      setProjects(list);
+      const urlProjectId = new URLSearchParams(window.location.search).get("projectId");
+      const urlFolderId = new URLSearchParams(window.location.search).get("folderId");
+      if (urlProjectId && list.some(p => p.id === urlProjectId)) {
+        setSelectedProjectId(urlProjectId);
+      }
+      if (urlFolderId) setSelectedFolderId(urlFolderId);
+    });
+  }, []);
   useEffect(() => {
     const restore = async () => {
       try {
-        const sessionId = getOrCreateSessionId();
+        const sessionId = params?.sessionId || getOrCreateSessionId();
         sessionIdRef.current = sessionId;
         const data = await apiGetSession(sessionId);
         if (!data) { setRestoring(false); return; }
@@ -400,6 +634,7 @@ export default function UploadPage() {
         setPageResults(results);
         setFile(new File([pdfFile], data.session.fileName, { type: "application/pdf" }));
         setNumPages(data.session.numPages);
+        setSelectedProjectId(data.session.projectId ?? "");
         const url = URL.createObjectURL(pdfFile);
         setFileUrl(url);
       } catch {
@@ -411,6 +646,38 @@ export default function UploadPage() {
     void restore();
   }, []);
 
+  const toggleProject = useCallback(async (projectId: string) => {
+    setExpandedProjects(prev => {
+      const next = new Set(prev);
+      if (next.has(projectId)) {
+        next.delete(projectId);
+        return next;
+      }
+      next.add(projectId);
+      return next;
+    });
+    if (!projectFolders[projectId]) {
+      setLoadingFolders(prev => new Set(prev).add(projectId));
+      const data = await apiGetProject(projectId);
+      if (data) {
+        setProjectFolders(prev => ({ ...prev, [projectId]: data.folders }));
+      }
+      setLoadingFolders(prev => { const n = new Set(prev); n.delete(projectId); return n; });
+    }
+  }, [projectFolders]);
+
+  const handleSelectProject = useCallback((projectId: string) => {
+    setSelectedProjectId(projectId);
+    setSelectedFolderId("");
+  }, []);
+
+  const handleSelectFolder = useCallback((projectId: string, folderId: string) => {
+    setSelectedProjectId(projectId);
+    setSelectedFolderId(folderId);
+  }, []);
+
+  const { setSidebarOpen } = useApp();
+
   const loadFile = useCallback(async (f: File) => {
     if (!f.type.includes("pdf")) return;
     if (f.size > MAX_FILE_BYTES) {
@@ -419,6 +686,8 @@ export default function UploadPage() {
     }
     setFileError("");
     if (fileUrl) URL.revokeObjectURL(fileUrl);
+    const url = URL.createObjectURL(f);
+    setFileUrl(url);
     setFile(f);
     setNumPages(0);
     setPageTexts({});
@@ -426,14 +695,29 @@ export default function UploadPage() {
     setExplaining(new Set());
     setBulkProgress(null);
     pageTextsRef.current = {};
-    const url = URL.createObjectURL(f);
-    setFileUrl(url);
 
-    const sessionId = getOrCreateSessionId();
+    const sessionId = params?.sessionId || crypto.randomUUID();
     sessionIdRef.current = sessionId;
     await savePdfToIDB(sessionId, f);
     await apiSaveSession(sessionId, f.name, f.size, 0);
-  }, [fileUrl]);
+    if (selectedProjectId) {
+      await apiAssignSessionToProject(sessionId, selectedProjectId);
+    }
+    if (selectedFolderId) {
+      await apiAssignSessionToFolder(sessionId, selectedFolderId);
+    }
+    const session: StoredSession = {
+      id: sessionId,
+      fileName: f.name,
+      fileSize: f.size,
+      numPages: 0,
+      projectId: selectedProjectId || null,
+      folderId: selectedFolderId || null,
+    };
+    cacheSessionInProject(selectedProjectId, session);
+    setSidebarOpen(true);
+    navigate("/");
+  }, [fileUrl, selectedProjectId, selectedFolderId, navigate, setSidebarOpen]);
 
   const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -475,12 +759,9 @@ export default function UploadPage() {
     return null;
   }, []);
 
-  const explainOnePage = useCallback(async (pageNum: number) => {
-    let text = pageTextsRef.current[pageNum];
-    if (!text) {
-      text = await waitForPageText(pageNum) ?? "";
-    }
-    if (!text) {
+  const explainOnePage = useCallback(async (pageNum: number, imageDataUrl?: string) => {
+    const text = pageTextsRef.current[pageNum] ?? "";
+    if (!text && !imageDataUrl) {
       setPageResults(prev => ({
         ...prev,
         [pageNum]: { translation: null, explanation: "", error: "لم يُستخرج نص من هذه الصفحة. قد تكون الصفحة صورة فقط." },
@@ -489,7 +770,7 @@ export default function UploadPage() {
     }
     setExplaining(prev => new Set(prev).add(pageNum));
     try {
-      const result = await callExplain(text);
+      const result = await callExplain(text, imageDataUrl ? [imageDataUrl] : undefined);
       setPageResults(prev => ({ ...prev, [pageNum]: result }));
       const sid = sessionIdRef.current;
       if (sid) {
@@ -506,7 +787,7 @@ export default function UploadPage() {
     } finally {
       setExplaining(prev => { const s = new Set(prev); s.delete(pageNum); return s; });
     }
-  }, [waitForPageText]);
+  }, []);
 
   const handleExplainAll = useCallback(async () => {
     if (bulkProgress || numPages === 0) return;
@@ -554,7 +835,7 @@ export default function UploadPage() {
   if (restoring) {
     return (
       <div dir="rtl" style={{ ...S.page, justifyContent: "center" }}>
-        <p style={S.loadingText}>⏳ جاري استعادة جلستك السابقة…</p>
+        <p style={{ ...S.loadingText, display: "inline-flex", alignItems: "center", gap: "8px" }}><Loader2 size={18} style={{ animation: "spin 1s linear infinite" }} /> جاري استعادة جلستك السابقة…</p>
       </div>
     );
   }
@@ -566,16 +847,28 @@ export default function UploadPage() {
         <div style={{ display: "flex", gap: "0.5rem" }}>
           {file && (
             <button
-              style={{ ...S.backBtn, background: "#fde8e8", border: "1px solid #f0b8b8", color: "#c05050" }}
+              style={{ ...S.backBtn, background: "var(--app-error-bg)", border: "1px solid var(--app-error-border)", color: "var(--app-error-text)" }}
               onClick={() => void handleReset()}
             >
-              🗑 مسح وبدء من جديد
+              <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}><Trash2 size={16} /> مسح وبدء من جديد</span>
             </button>
           )}
-          <button style={S.backBtn} onClick={() => navigate("/")}>← الرئيسية</button>
+          <button style={S.backBtn} onClick={() => navigate("/")}><span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}><ArrowRight size={16} /> الرئيسية</span></button>
         </div>
       </div>
-
+      {!file && projects.length > 0 && (
+        <ProjectTree
+          projects={projects}
+          selectedProjectId={selectedProjectId}
+          selectedFolderId={selectedFolderId}
+          expandedProjects={expandedProjects}
+          projectFolders={projectFolders}
+          loadingFolders={loadingFolders}
+          onToggleProject={toggleProject}
+          onSelectProject={handleSelectProject}
+          onSelectFolder={handleSelectFolder}
+        />
+      )}
       {!file && (
         <div
           style={S.dropZone(dragActive)}
@@ -584,7 +877,7 @@ export default function UploadPage() {
           onDrop={onDrop}
           onClick={() => inputRef.current?.click()}
         >
-          <div style={S.uploadIcon}>📄</div>
+          <FileUp size={48} style={{ display: "block", margin: "0 auto 1rem" }} />
           <p style={S.dropText}>اسحب ملف PDF هنا أو اضغط للاختيار</p>
           <p style={S.dropSub}>يدعم ملفات PDF فقط • الحد الأقصى: {MAX_FILE_MB} MB</p>
           <button style={S.uploadBtn} onClick={(e) => { e.stopPropagation(); inputRef.current?.click(); }}>
@@ -609,13 +902,34 @@ export default function UploadPage() {
           flexWrap: "wrap" as const,
           gap: "0.5rem",
         }}>
-          <p style={{ margin: 0, color: C.fileName, fontWeight: 600, fontSize: "0.9rem" }}>
-            📎 {file.name}
+          <p style={{ margin: 0, color: C.fileName, fontWeight: 600, fontSize: "0.9rem", display: "flex", alignItems: "center", gap: "6px" }}>
+            <Paperclip size={16} /> {file.name}
           </p>
-          <div style={{ display: "flex", gap: "1rem", alignItems: "center" }}>
+          <div style={{ display: "flex", gap: "1rem", alignItems: "center", flexWrap: "wrap" }}>
+            {projects.length > 0 && (
+              <ProjectTree
+                projects={projects}
+                selectedProjectId={selectedProjectId}
+                selectedFolderId={selectedFolderId}
+                expandedProjects={expandedProjects}
+                projectFolders={projectFolders}
+                loadingFolders={loadingFolders}
+                onToggleProject={toggleProject}
+                onSelectProject={(pid) => {
+                  handleSelectProject(pid);
+                  void apiAssignSessionToProject(sessionIdRef.current, pid || null);
+                  void apiAssignSessionToFolder(sessionIdRef.current, null);
+                }}
+                onSelectFolder={(pid, fid) => {
+                  handleSelectFolder(pid, fid);
+                  void apiAssignSessionToProject(sessionIdRef.current, pid);
+                  void apiAssignSessionToFolder(sessionIdRef.current, fid);
+                }}
+              />
+            )}
             {hasAnyResults && (
-              <span style={{ fontSize: "0.8rem", color: "#7ab87a", fontWeight: 700 }}>
-                ✓ {explainedCount} من {numPages} صفحة محفوظة
+              <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", fontSize: "0.8rem", color: "var(--app-green)", fontWeight: 700 }}>
+                <CheckCircle size={16} /> {explainedCount} من {numPages} صفحة محفوظة
               </span>
             )}
             <button
@@ -623,7 +937,7 @@ export default function UploadPage() {
                 ...S.backBtn,
                 fontSize: "0.82rem",
                 padding: "0.3rem 0.9rem",
-                background: "#e8f0fb",
+                background: "var(--app-accent-bg)",
               }}
               onClick={() => inputRef.current?.click()}
             >
@@ -635,8 +949,8 @@ export default function UploadPage() {
       )}
 
       {fileError && (
-        <div style={{ width: "100%", maxWidth: "860px", marginBottom: "1.5rem", padding: "1rem 1.2rem", background: "#fff0f0", border: "1px solid #f0c0c0", borderRadius: "14px" }}>
-          <p style={{ margin: 0, color: "#c05050", fontWeight: 600, fontSize: "0.95rem" }}>⚠️ {fileError}</p>
+        <div style={{ width: "100%", maxWidth: "860px", marginBottom: "1.5rem", padding: "1rem 1.2rem", background: "var(--app-error-bg)", border: "1px solid var(--app-error-border)", borderRadius: "14px" }}>
+          <p style={{ margin: 0, color: "var(--app-error-text)", fontWeight: 600, fontSize: "0.95rem", display: "flex", alignItems: "center", gap: "6px" }}><AlertTriangle size={16} /> {fileError}</p>
         </div>
       )}
 
@@ -648,21 +962,21 @@ export default function UploadPage() {
             disabled={isBulkBusy || pendingPages === 0}
           >
             {isBulkBusy
-              ? "⏳ جاري الشرح…"
+              ? <span style={{ display: "inline-flex", alignItems: "center", gap: "8px", justifyContent: "center" }}><Loader2 size={18} style={{ animation: "spin 1s linear infinite" }} /> جاري الشرح…</span>
               : pendingPages === 0
-                ? "✅ جميع الصفحات مشروحة"
-                : `🚀 اشرح كل الصفحات ${pendingPages < numPages ? `(${pendingPages} متبقية)` : ""}`}
+                ? <span style={{ display: "inline-flex", alignItems: "center", gap: "8px", justifyContent: "center" }}><CheckCircle size={18} /> جميع الصفحات مشروحة</span>
+                : <span style={{ display: "inline-flex", alignItems: "center", gap: "8px", justifyContent: "center" }}><Rocket size={18} /> اشرح كل الصفحات {pendingPages < numPages ? `(${pendingPages} متبقية)` : ""}</span>}
           </button>
 
           {bulkProgress && (
             <div style={S.progressBar}>
-              <p style={{ margin: "0 0 0.5rem", fontSize: "0.9rem", color: "#7060c0", fontWeight: 700 }}>
+              <p style={{ margin: "0 0 0.5rem", fontSize: "0.9rem", color: "var(--app-content-summary-text)", fontWeight: 700 }}>
                 جاري شرح الصفحة {bulkProgress.current} من {bulkProgress.total}
               </p>
-              <div style={{ background: "#e8d8f8", borderRadius: "8px", height: "10px", overflow: "hidden" }}>
+              <div style={{ background: "var(--app-accent-bg)", borderRadius: "8px", height: "10px", overflow: "hidden" }}>
                 <div style={{
                   width: `${(bulkProgress.current / bulkProgress.total) * 100}%`,
-                  background: "linear-gradient(90deg, #c8a8f0, #a880e8)",
+                  background: "linear-gradient(90deg, var(--app-accent-light), var(--app-accent))",
                   height: "100%",
                   borderRadius: "8px",
                   transition: "width 0.4s ease",
@@ -701,6 +1015,7 @@ export default function UploadPage() {
       <style>{`
         .react-pdf__Page { background: transparent !important; }
         .react-pdf__Page canvas { display: block; }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
       `}</style>
     </div>
   );

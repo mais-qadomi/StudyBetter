@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import "@fontsource/ibm-plex-sans-arabic";
 @plugin "@tailwindcss/typography";
 
 @custom-variant dark (&:is(.dark *));
@@ -95,84 +96,53 @@
 
 /* LIGHT MODE */
 :root {
-  --button-outline: rgba(0,0,0, .10);
-  --badge-outline: rgba(0,0,0, .05);
+  --button-outline: rgba(0, 0, 0, .10);
+  --badge-outline: rgba(0, 0, 0, .05);
+  --opaque-button-border-intensity: -8;
+  --elevate-1: rgba(0, 0, 0, .03);
+  --elevate-2: rgba(0, 0, 0, .08);
 
-  /* Automatic computation of border around primary / danger buttons */
-  --opaque-button-border-intensity: -8; /* In terms of percentages */
+  --background: 210 20% 98%;
+  --foreground: 222 47% 11%;
+  --border: 214 32% 91%;
+  --card: 0 0% 100%;
+  --card-foreground: 222 47% 11%;
+  --card-border: 214 32% 91%;
+  --sidebar: 0 0% 100%;
+  --sidebar-foreground: 222 47% 11%;
+  --sidebar-border: 214 32% 91%;
+  --sidebar-primary: 221 83% 53%;
+  --sidebar-primary-foreground: 210 40% 98%;
+  --sidebar-accent: 210 40% 96%;
+  --sidebar-accent-foreground: 222 47% 11%;
+  --sidebar-ring: 221 83% 53%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222 47% 11%;
+  --popover-border: 214 32% 91%;
+  --primary: 221 83% 53%;
+  --primary-foreground: 210 40% 98%;
+  --secondary: 210 40% 96%;
+  --secondary-foreground: 222 47% 11%;
+  --muted: 210 40% 96%;
+  --muted-foreground: 215 16% 47%;
+  --accent: 210 40% 96%;
+  --accent-foreground: 222 47% 11%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 210 40% 98%;
+  --input: 214 32% 91%;
+  --ring: 221 83% 53%;
+  --chart-1: 221 83% 53%;
+  --chart-2: 199 89% 48%;
+  --chart-3: 262 83% 58%;
+  --chart-4: 142 71% 45%;
+  --chart-5: 0 84% 60%;
 
-  /* Backgrounds applied on top of other backgrounds when hovered/active */
-  --elevate-1: rgba(0,0,0, .03);
-  --elevate-2: rgba(0,0,0, .08);
-
-  --background: red; /*replace with H S L */
-
-  --foreground: red; /*replace with H S L */
-
-  --border: red; /*replace with H S L */
-
-  --card: red; /*replace with H S L */
-
-  --card-foreground: red; /*replace with H S L */
-
-  --card-border: red; /*replace with H S L */
-
-  --sidebar: red; /*replace with H S L */
-
-  --sidebar-foreground: red; /*replace with H S L */
-
-  --sidebar-border: red; /*replace with H S L */
-
-  --sidebar-primary: red; /*replace with H S L */
-
-  --sidebar-primary-foreground: red; /*replace with H S L */
-
-  --sidebar-accent: red; /*replace with H S L */
-
-  --sidebar-accent-foreground: red; /*replace with H S L */
-
-  --sidebar-ring: red; /*replace with H S L */
-
-  --popover: red; /*replace with H S L */
-
-  --popover-foreground: red; /*replace with H S L */
-
-  --popover-border: red; /*replace with H S L */
-
-  --primary: red; /*replace with H S L */
-
-  --primary-foreground: red; /*replace with H S L */
-
-  --secondary: red; /*replace with H S L */
-
-  --secondary-foreground: red; /*replace with H S L */
-
-  --muted: red; /*replace with H S L */
-
-  --muted-foreground: red; /*replace with H S L */
-
-  --accent: red; /*replace with H S L */
-
-  --accent-foreground: red; /*replace with H S L */
-
-  --destructive: red; /*replace with H S L */
-
-  --destructive-foreground: red; /*replace with H S L */
-
-  --input: red; /*replace with H S L */
-  --ring: red; /*replace with H S L */
-  --chart-1: red; /*replace with H S L */
-  --chart-2: red; /*replace with H S L */
-  --chart-3: red; /*replace with H S L */
-  --chart-4: red; /*replace with H S L */
-  --chart-5: red; /*replace with H S L */
-
-  --app-font-sans: 'Inter', sans-serif;
+  --app-font-sans: 'IBM Plex Sans Arabic', 'Inter', sans-serif;
   --app-font-serif: Georgia, serif;
   --app-font-mono: Menlo, monospace;
-  --radius: .5rem; /* 8px */
-  --shadow-2xs: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00); /*replace with H S L */
-  --shadow-xs: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00); /*replace with H S L */
+  --radius: .5rem;
+  --shadow-2xs: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00);
+  --shadow-xs: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00);
   --shadow-sm: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00), 0px 1px 2px -1px hsl(202.8169 89.1213% 53.1373% / 0.00);
   --shadow: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00), 0px 1px 2px -1px hsl(202.8169 89.1213% 53.1373% / 0.00);
   --shadow-md: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00), 0px 2px 4px -1px hsl(202.8169 89.1213% 53.1373% / 0.00);
@@ -182,109 +152,143 @@
   --tracking-normal: 0em;
   --spacing: 0.25rem;
 
-  /* Automatically computed borders - intensity can be controlled by the user by the --opaque-button-border-intensity setting */
-
-  /* Fallback for older browsers */
   --sidebar-primary-border: hsl(var(--sidebar-primary));
   --sidebar-primary-border: hsl(from hsl(var(--sidebar-primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
-
-  /* Fallback for older browsers */
   --sidebar-accent-border: hsl(var(--sidebar-accent));
   --sidebar-accent-border: hsl(from hsl(var(--sidebar-accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
-
-  /* Fallback for older browsers */
   --primary-border: hsl(var(--primary));
   --primary-border: hsl(from hsl(var(--primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
-
-  /* Fallback for older browsers */
   --secondary-border: hsl(var(--secondary));
   --secondary-border: hsl(from hsl(var(--secondary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
-
-  /* Fallback for older browsers */
   --muted-border: hsl(var(--muted));
   --muted-border: hsl(from hsl(var(--muted)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
-
-  /* Fallback for older browsers */
   --accent-border: hsl(var(--accent));
   --accent-border: hsl(from hsl(var(--accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
-
-  /* Fallback for older browsers */
   --destructive-border: hsl(var(--destructive));
   --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+
+  /* ── App custom colors (light) ── */
+  --app-bg: #f8fafc;
+  --app-bg-alt: #f0f4f8;
+  --app-bg-page: linear-gradient(135deg, #f0f9ff 0%, #fdf4ff 50%, #f0fdf4 100%);
+  --app-bg-page-alt: linear-gradient(135deg, #c8e6f8 0%, #f0cce8 50%, #c8eedd 100%);
+  --app-text: #1e293b;
+  --app-text-secondary: #334155;
+  --app-muted: #64748b;
+  --app-muted-light: #94a3b8;
+  --app-border: #e2e8f0;
+  --app-accent: #6366f1;
+  --app-accent-hover: #4f46e5;
+  --app-accent-light: #a5b4fc;
+  --app-accent-bg: #eef2ff;
+  --app-green: #10b981;
+  --app-red: #ef4444;
+  --app-card: #ffffff;
+  --app-card-border: #a8ccee;
+  --app-shadow: 0 4px 24px rgba(0,0,0,0.1);
+  --app-overlay: rgba(0,0,0,0.2);
+  --app-primary: #2878c8;
+  --app-primary-light: #4a9ee0;
+  --app-primary-bg: #e8f4ff;
+  --app-primary-bg-light: #f5fbff;
+  --app-work: #2878c8;
+  --app-short: #2a9d6a;
+  --app-long: #8a60c8;
+
+  /* ── Content semantic colors (light) ── */
+  --app-content-heading-bg: #7F77DD;
+  --app-content-heading-text: #3C3489;
+  --app-content-heading-border: #e0d8f8;
+  --app-content-note-bg: #F5F0FF;
+  --app-content-note-border: #C8B8F0;
+  --app-content-note-text: #534AB7;
+  --app-content-note-strong: #3C3489;
+  --app-content-exam-bg: #FAEEDA;
+  --app-content-exam-border: #EF9F27;
+  --app-content-exam-text: #633806;
+  --app-content-exam-strong: #412402;
+  --app-content-summary-bg: #EEEDFE;
+  --app-content-summary-border: #AFA9EC;
+  --app-content-summary-text: #3C3489;
+  --app-content-summary-item: #534AB7;
+  --app-content-summary-bullet: #7F77DD;
+  --app-content-en-bg: #EEEDFE;
+  --app-content-en-text: #3C3489;
+  --app-content-example-bg: #f0f8ff;
+  --app-content-example-border: #c0d8f0;
+  --app-content-example-text: #3a6a9a;
+  --app-content-paragraph: #3a4a6a;
+  --app-error-bg: #fff0f0;
+  --app-error-border: #f0c0c0;
+  --app-error-text: #c06060;
+  --app-block-warning-bg: #fefce8;
+  --app-block-warning-border: #fde68a;
+  --app-block-warning-text: #92400e;
+  --app-block-warning-label: #a16207;
+  --app-block-error-bg: #fef2f2;
+  --app-block-error-border: #fecaca;
+  --app-block-error-text: #991b1b;
+  --app-block-error-label: #dc2626;
+  --app-block-info-bg: #f0f9ff;
+  --app-block-info-border: #bae6fd;
+  --app-block-info-text: #075985;
+  --app-block-info-label: #0284c7;
+  --app-block-tip-bg: #f5f3ff;
+  --app-block-tip-border: #ddd6fe;
+  --app-block-tip-text: #5b21b6;
+  --app-block-tip-label: #7c3aed;
+  --app-block-en-text: #2563eb;
+  --app-success: #16a34a;
+  --app-danger: #dc2626;
+  --app-amber: #f59e0b;
+  --app-blue: #3b82f6;
+  --app-block-success-bg: #f0fdf4;
+  --app-block-success-border: #bbf7d0;
+  --app-icon-folder: #f59e0b;
+  --app-icon-file: #3b82f6;
 }
 
 .dark {
-  --button-outline: rgba(255,255,255, .10);
-  --badge-outline: rgba(255,255,255, .05);
+  --button-outline: rgba(255, 255, 255, .10);
+  --badge-outline: rgba(255, 255, 255, .05);
+  --opaque-button-border-intensity: 9;
+  --elevate-1: rgba(255, 255, 255, .04);
+  --elevate-2: rgba(255, 255, 255, .09);
 
-  --opaque-button-border-intensity: 9;  /* In terms of percentages */
-
-  /* Backgrounds applied on top of other backgrounds when hovered/active */
-  --elevate-1: rgba(255,255,255, .04);
-  --elevate-2: rgba(255,255,255, .09);
-
-  --background: red; /*replace with H S L */
-
-  --foreground: red; /*replace with H S L */
-
-  --border: red; /*replace with H S L */
-
-  --card: red; /*replace with H S L */
-
-  --card-foreground: red; /*replace with H S L */
-
-  --card-border: red; /*replace with H S L */
-
-  --sidebar: red; /*replace with H S L */
-
-  --sidebar-foreground: red; /*replace with H S L */
-
-  --sidebar-border: red; /*replace with H S L */
-
-  --sidebar-primary: red; /*replace with H S L */
-
-  --sidebar-primary-foreground: red; /*replace with H S L */
-
-  --sidebar-accent: red; /*replace with H S L */
-
-  --sidebar-accent-foreground: red; /*replace with H S L */
-
-  --sidebar-ring: red; /*replace with H S L */
-
-  --popover: red; /*replace with H S L */
-
-  --popover-foreground: red; /*replace with H S L */
-
-  --popover-border: red; /*replace with H S L */
-
-  --primary: red; /*replace with H S L */
-
-  --primary-foreground: red; /*replace with H S L */
-
-  --secondary: red; /*replace with H S L */
-
-  --secondary-foreground: red; /*replace with H S L */
-
-  --muted: red; /*replace with H S L */
-
-  --muted-foreground: red; /*replace with H S L */
-
-  --accent: red; /*replace with H S L */
-
-  --accent-foreground: red; /*replace with H S L */
-
-  --destructive: red; /*replace with H S L */
-
-  --destructive-foreground: red; /*replace with H S L */
-
-  /* Used as the border around inputs. Dark mode: Should be a border that is light enough to have high contrast when rendered on a --card background. More contrast than standard --border */
-  --input: red; /*replace with H S L */
-  --ring: red; /*replace with H S L */
-  --chart-1: red; /*replace with H S L */
-  --chart-2: red; /*replace with H S L */
-  --chart-3: red; /*replace with H S L */
-  --chart-4: red; /*replace with H S L */
-  --chart-5: red; /*replace with H S L */
+  --background: 222 47% 11%;
+  --foreground: 210 40% 98%;
+  --border: 217 33% 17%;
+  --card: 222 47% 11%;
+  --card-foreground: 210 40% 98%;
+  --card-border: 217 33% 20%;
+  --sidebar: 222 47% 11%;
+  --sidebar-foreground: 210 40% 98%;
+  --sidebar-border: 217 33% 17%;
+  --sidebar-primary: 217 91% 60%;
+  --sidebar-primary-foreground: 222 47% 11%;
+  --sidebar-accent: 217 33% 17%;
+  --sidebar-accent-foreground: 210 40% 98%;
+  --sidebar-ring: 224 76% 48%;
+  --popover: 222 47% 11%;
+  --popover-foreground: 210 40% 98%;
+  --popover-border: 217 33% 17%;
+  --primary: 217 91% 60%;
+  --primary-foreground: 222 47% 11%;
+  --secondary: 217 33% 17%;
+  --secondary-foreground: 210 40% 98%;
+  --muted: 217 33% 17%;
+  --muted-foreground: 215 20% 65%;
+  --accent: 217 33% 17%;
+  --accent-foreground: 210 40% 98%;
+  --destructive: 0 62% 30%;
+  --destructive-foreground: 210 40% 98%;
+  --input: 217 33% 20%;
+  --ring: 224 76% 48%;
+  --chart-1: 217 91% 60%;
+  --chart-2: 199 89% 48%;
+  --chart-3: 262 83% 58%;
+  --chart-4: 142 71% 45%;
+  --chart-5: 0 84% 60%;
 
   --shadow-2xs: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00);
   --shadow-xs: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00);
@@ -295,6 +299,85 @@
   --shadow-xl: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00), 0px 8px 10px -1px hsl(202.8169 89.1213% 53.1373% / 0.00);
   --shadow-2xl: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00);
 
+  /* ── App custom colors (dark) ── */
+  --app-bg: #0f172a;
+  --app-bg-alt: #1e293b;
+  --app-bg-page: #0f172a;
+  --app-bg-page-alt: #0f172a;
+  --app-text: #f1f5f9;
+  --app-text-secondary: #cbd5e1;
+  --app-muted: #94a3b8;
+  --app-muted-light: #64748b;
+  --app-border: #334155;
+  --app-accent: #818cf8;
+  --app-accent-hover: #6366f1;
+  --app-accent-light: #6366f1;
+  --app-accent-bg: #1e1b4b;
+  --app-green: #34d399;
+  --app-red: #f87171;
+  --app-card: #1e293b;
+  --app-card-border: #475569;
+  --app-shadow: 0 4px 24px rgba(0,0,0,0.4);
+  --app-overlay: rgba(0,0,0,0.5);
+  --app-primary: #60a5fa;
+  --app-primary-light: #93c5fd;
+  --app-primary-bg: #1e3a5f;
+  --app-primary-bg-light: #1e293b;
+  --app-work: #60a5fa;
+  --app-short: #4ade80;
+  --app-long: #a78bfa;
+
+  /* ── Content semantic colors (dark) ── */
+  --app-content-heading-bg: #9B94E8;
+  --app-content-heading-text: #C8C0F8;
+  --app-content-heading-border: #4A4290;
+  --app-content-note-bg: #2A2350;
+  --app-content-note-border: #5C54A0;
+  --app-content-note-text: #B8B0F0;
+  --app-content-note-strong: #C8C0F8;
+  --app-content-exam-bg: #3D2E14;
+  --app-content-exam-border: #D4A040;
+  --app-content-exam-text: #E8C878;
+  --app-content-exam-strong: #F0D898;
+  --app-content-summary-bg: #2A2350;
+  --app-content-summary-border: #6C64B0;
+  --app-content-summary-text: #C8C0F8;
+  --app-content-summary-item: #B8B0F0;
+  --app-content-summary-bullet: #9B94E8;
+  --app-content-en-bg: #2A2350;
+  --app-content-en-text: #C8C0F8;
+  --app-content-example-bg: #1A2A40;
+  --app-content-example-border: #206898;
+  --app-content-example-text: #7CB8E8;
+  --app-content-paragraph: #A0B8D8;
+  --app-error-bg: #3D1414;
+  --app-error-border: #A04040;
+  --app-error-text: #E08080;
+  --app-block-warning-bg: #3D2E14;
+  --app-block-warning-border: #8A7030;
+  --app-block-warning-text: #E8C878;
+  --app-block-warning-label: #D4A840;
+  --app-block-error-bg: #3D1414;
+  --app-block-error-border: #A04040;
+  --app-block-error-text: #E08080;
+  --app-block-error-label: #F09090;
+  --app-block-info-bg: #0A2A40;
+  --app-block-info-border: #206898;
+  --app-block-info-text: #80C0E8;
+  --app-block-info-label: #60B0E0;
+  --app-block-tip-bg: #1A1040;
+  --app-block-tip-border: #5040A0;
+  --app-block-tip-text: #B8A8F0;
+  --app-block-tip-label: #A080E8;
+  --app-block-en-text: #80B8F0;
+  --app-success: #22c55e;
+  --app-danger: #ef4444;
+  --app-amber: #fbbf24;
+  --app-blue: #60a5fa;
+  --app-block-success-bg: #052e16;
+  --app-block-success-border: #166534;
+  --app-icon-folder: #fbbf24;
+  --app-icon-file: #60a5fa;
 }
 
 @layer base {
@@ -303,7 +386,7 @@
   }
 
   body {
-    @apply font-sans antialiased bg-background text-foreground;
+    @apply font-sans antialiased;
   }
 }
 
@@ -327,6 +410,8 @@
  * Even without handling focused or not, this is six possible combinations that
  * need to be distinguished from eachother visually.
  */
+@keyframes spin { to { transform: rotate(360deg); } }
+
 @layer utilities {
 
   /* Hide ugly search cancel button in Chrome until we can style it properly */

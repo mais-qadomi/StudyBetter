@@ -1,8 +1,11 @@
 import { Router, type IRouter } from "express";
-import { db, sessionsTable, pageResultsTable } from "@workspace/db";
+import { db, sessionsTable, pageResultsTable, projectsTable, foldersTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
+import { randomUUID } from "crypto";
 
 const router: IRouter = Router();
+
+// ===== SESSIONS =====
 
 router.get("/sessions/:id", async (req, res) => {
   const { id } = req.params;
@@ -27,11 +30,12 @@ router.get("/sessions/:id", async (req, res) => {
 });
 
 router.post("/sessions", async (req, res) => {
-  const { sessionId, fileName, fileSize, numPages } = req.body as {
+  const { sessionId, fileName, fileSize, numPages, projectId } = req.body as {
     sessionId: string;
     fileName: string;
     fileSize: number;
     numPages: number;
+    projectId?: string;
   };
   if (!sessionId || !fileName) {
     res.status(400).json({ error: "sessionId and fileName required" });
@@ -44,7 +48,7 @@ router.post("/sessions", async (req, res) => {
     if (existing) {
       const [updated] = await db
         .update(sessionsTable)
-        .set({ fileName, fileSize, numPages })
+        .set({ fileName, fileSize, numPages, ...(projectId !== undefined && { projectId }) })
         .where(eq(sessionsTable.id, sessionId))
         .returning();
       res.json(updated);
@@ -52,7 +56,7 @@ router.post("/sessions", async (req, res) => {
     }
     const [created] = await db
       .insert(sessionsTable)
-      .values({ id: sessionId, fileName, fileSize, numPages })
+      .values({ id: sessionId, fileName, fileSize, numPages, projectId: projectId ?? null })
       .returning();
     res.json(created);
   } catch (err) {
@@ -129,6 +133,119 @@ router.delete("/sessions/:id", async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     req.log.error({ err }, "DELETE /sessions/:id failed");
+    res.status(500).json({ error: "database error" });
+  }
+});
+
+router.patch("/sessions/:id/project", async (req, res) => {
+  const { id } = req.params;
+  const { projectId } = req.body as { projectId: string | null };
+  try {
+    const [updated] = await db
+      .update(sessionsTable)
+      .set({ projectId: projectId ?? null })
+      .where(eq(sessionsTable.id, id))
+      .returning();
+    if (!updated) {
+      res.status(404).json({ error: "session not found" });
+      return;
+    }
+    res.json(updated);
+  } catch (err) {
+    req.log.error({ err }, "PATCH /sessions/:id/project failed");
+    res.status(500).json({ error: "database error" });
+  }
+});
+
+// ===== PROJECTS =====
+
+router.get("/projects", async (req, res) => {
+  try {
+    const projects = await db.select().from(projectsTable).orderBy(projectsTable.createdAt);
+    res.json(projects);
+  } catch (err) {
+    req.log.error({ err }, "GET /projects failed");
+    res.status(500).json({ error: "database error" });
+  }
+});
+
+router.get("/projects/:id", async (req, res) => {
+  const { id } = req.params;
+  try {
+    const [project] = await db
+      .select()
+      .from(projectsTable)
+      .where(eq(projectsTable.id, id))
+      .limit(1);
+    if (!project) {
+      res.status(404).json({ error: "project not found" });
+      return;
+    }
+    const sessions = await db
+      .select()
+      .from(sessionsTable)
+      .where(eq(sessionsTable.projectId, id))
+      .orderBy(sessionsTable.createdAt);
+    const folders = await db
+      .select()
+      .from(foldersTable)
+      .where(eq(foldersTable.projectId, id))
+      .orderBy(foldersTable.createdAt);
+    res.json({ project, sessions, folders });
+  } catch (err) {
+    req.log.error({ err }, "GET /projects/:id failed");
+    res.status(500).json({ error: "database error" });
+  }
+});
+
+router.post("/projects", async (req, res) => {
+  const { name, description } = req.body as { name: string; description?: string };
+  if (!name?.trim()) {
+    res.status(400).json({ error: "name is required" });
+    return;
+  }
+  try {
+    const [created] = await db
+      .insert(projectsTable)
+      .values({ id: randomUUID(), name: name.trim(), description: description?.trim() })
+      .returning();
+    res.json(created);
+  } catch (err) {
+    req.log.error({ err }, "POST /projects failed");
+    res.status(500).json({ error: "database error" });
+  }
+});
+
+router.patch("/projects/:id", async (req, res) => {
+  const { id } = req.params;
+  const { name, description } = req.body as { name?: string; description?: string };
+  try {
+    const [updated] = await db
+      .update(projectsTable)
+      .set({
+        ...(name && { name: name.trim() }),
+        ...(description !== undefined && { description: description?.trim() }),
+      })
+      .where(eq(projectsTable.id, id))
+      .returning();
+    if (!updated) {
+      res.status(404).json({ error: "project not found" });
+      return;
+    }
+    res.json(updated);
+  } catch (err) {
+    req.log.error({ err }, "PATCH /projects/:id failed");
+    res.status(500).json({ error: "database error" });
+  }
+});
+
+router.delete("/projects/:id", async (req, res) => {
+  const { id } = req.params;
+  try {
+    await db.delete(projectsTable).where(eq(projectsTable.id, id));
+    res.json({ ok: true });
+  } catch (err) {
+    req.log.error({ err }, "DELETE /projects/:id failed");
     res.status(500).json({ error: "database error" });
   }
 });
