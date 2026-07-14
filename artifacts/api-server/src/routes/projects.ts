@@ -19,12 +19,12 @@ router.post("/folders", async (req, res) => {
     return;
   }
   try {
-    const lastFolder = await db
+    const allFolders = await db
       .select()
       .from(foldersTable)
       .where(eq(foldersTable.projectId, projectId))
       .orderBy(asc(foldersTable.order));
-    const maxOrder = lastFolder.length > 0 ? lastFolder[lastFolder.length - 1].order : -1;
+    const maxOrder = allFolders.length > 0 ? allFolders[allFolders.length - 1].order : -1;
     const [created] = await db
       .insert(foldersTable)
       .values({ id: randomUUID(), name: name.trim(), projectId, parentFolderId: parentFolderId ?? null, order: maxOrder + 1 })
