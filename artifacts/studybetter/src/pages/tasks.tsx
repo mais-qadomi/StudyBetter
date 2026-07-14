@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
-import { Play, X, Plus, ArrowRight, Target, Coffee, Leaf, BarChart3, ClipboardList, Sparkles, Settings, Pin, Loader2, GripVertical, Clock, ListChecks } from "lucide-react";
+import { Play, X, Plus, ArrowRight, Target, Coffee, Leaf, BarChart3, ClipboardList, Sparkles, Settings, Pin, GripVertical, Clock } from "lucide-react";
 
 type Task = { id: string; text: string; done: boolean; };
 type DayFocus = { date: string; minutes: number; };

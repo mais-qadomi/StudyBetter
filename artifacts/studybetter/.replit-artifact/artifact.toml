@@ -1,8 +1,8 @@
 kind = "web"
 previewPath = "/"
-title = "صفحة الترحيب"
+title = "StudyBetter"
 version = "1.0.0"
-id = "artifacts/welcome-page"
+id = "artifacts/studybetter"
 router = "path"
 
 [[integratedSkills]]
@@ -15,11 +15,11 @@ paths = [ "/" ]
 localPort = 19942
 
 [services.development]
-run = "pnpm --filter @workspace/welcome-page run dev"
+run = "pnpm --filter @workspace/studybetter run dev"
 
 [services.production]
-build = [ "pnpm", "--filter", "@workspace/welcome-page", "run", "build" ]
-publicDir = "artifacts/welcome-page/dist/public"
+build = [ "pnpm", "--filter", "@workspace/studybetter", "run", "build" ]
+publicDir = "artifacts/studybetter/dist/public"
 serve = "static"
 
 [[services.production.rewrites]]

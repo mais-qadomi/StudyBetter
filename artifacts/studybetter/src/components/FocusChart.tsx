@@ -54,7 +54,7 @@ export default function FocusChart({ data }: Props) {
               dataKey="minutes"
               radius={[6, 6, 0, 0]}
               barSize={24}
-              shape={(props: any) => {
+              shape={(props: { x?: number; y?: number; width?: number; height?: number; payload: DayData }) => {
                 const { x, y, width, height, payload } = props;
                 const color = payload.isToday
                   ? "url(#todayGrad)"
