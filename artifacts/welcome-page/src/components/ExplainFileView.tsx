@@ -8,8 +8,6 @@ import { classifyPage, capturePageCanvas, type PageType } from "../lib/pdf-page-
 
 pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
 
-const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
-
 function parseInline(text: string): React.ReactNode[] {
   const parts = text.split(/(\[EN\].*?\[\/EN\]|\[EX\].*?\[\/EX\])/gs);
   return parts.map((part, i) => {
