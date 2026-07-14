@@ -412,7 +412,7 @@ importers:
         specifier: 'catalog:'
         version: 3.25.76
 
-  artifacts/welcome-page:
+  artifacts/studybetter:
     dependencies:
       '@fontsource/ibm-plex-sans-arabic':
         specifier: ^5.2.9
