@@ -137,31 +137,19 @@ function GlobalHeader() {
       gap: "clamp(0.3rem, 0.8vw, 0.5rem)",
     }}>
       <div style={{ display: "flex", alignItems: "center", gap: "clamp(0.75rem, 1.5vw, 1.5rem)" }}>
-        <GlobalSearch />
-        <button onClick={toggleDark}
-          style={{
-            background: "none", border: "1.5px solid var(--app-border)",
-            borderRadius: "clamp(8px, 1.2vw, 10px)", padding: "clamp(0.3rem, 0.5vw, 0.4rem) clamp(0.5rem, 0.8vw, 0.7rem)",
-            cursor: "pointer", fontSize: "clamp(0.8rem, 1.1vw, 0.9rem)",
-            color: "var(--app-muted)", fontFamily: "inherit",
-            display: "flex", alignItems: "center",
-            transition: "all 0.15s",
-          }}>
-          {dark ? <Sun size={15} /> : <Moon size={15} />}
-        </button>
         <div className="hdr-stats" style={{ display: "flex", alignItems: "center", gap: "clamp(0.75rem, 1.5vw, 1.5rem)" }}>
-        <div className="hdr-pomo" style={{ textAlign: "center" }}>
-          <div style={{ fontSize: "clamp(0.78rem, 1.1vw, 0.9rem)", color: "var(--app-muted)", fontWeight: 700, marginBottom: "2px", display: "flex", alignItems: "center", gap: "4px" }}>
-            <Clock size={14} /> {running ? "جاري التركيز" : "البومودورو"}
+          <div className="hdr-pomo" style={{ textAlign: "center" }}>
+            <div style={{ fontSize: "clamp(0.78rem, 1.1vw, 0.9rem)", color: "var(--app-muted)", fontWeight: 700, marginBottom: "2px", display: "flex", alignItems: "center", gap: "4px" }}>
+              <Clock size={14} /> {running ? "جاري التركيز" : "البومودورو"}
+            </div>
+            <div style={{ fontSize: "clamp(1.3rem, 2.2vw, 1.8rem)", fontWeight: 800, color: running ? modeColor : "var(--app-muted-light)", fontFamily: "monospace", letterSpacing: "2px" }}>
+              {mins}:{secs}
+            </div>
           </div>
-          <div style={{ fontSize: "clamp(1.3rem, 2.2vw, 1.8rem)", fontWeight: 800, color: running ? modeColor : "var(--app-muted-light)", fontFamily: "monospace", letterSpacing: "2px" }}>
-            {mins}:{secs}
+          <div style={{ textAlign: "left" }}>
+            <div style={{ fontSize: "clamp(0.78rem, 1.1vw, 0.9rem)", color: "var(--app-muted)", fontWeight: 700 }}>تركيز اليوم</div>
+            <div style={{ fontSize: "clamp(1.2rem, 2vw, 1.6rem)", fontWeight: 800, color: "var(--app-primary)" }}>{todayFocusMin} د</div>
           </div>
-        </div>
-        <div style={{ textAlign: "left" }}>
-          <div style={{ fontSize: "clamp(0.78rem, 1.1vw, 0.9rem)", color: "var(--app-muted)", fontWeight: 700 }}>تركيز اليوم</div>
-          <div style={{ fontSize: "clamp(1.2rem, 2vw, 1.6rem)", fontWeight: 800, color: "var(--app-primary)" }}>{todayFocusMin} د</div>
-        </div>
         </div>
 
         {user && (
@@ -260,6 +248,18 @@ function GlobalHeader() {
             transition: "all 0.15s", whiteSpace: "nowrap",
           }}>
           <FolderOpen size={15} /> <span className="hdr-label" style={{ display: "inline" }}>ملفاتي</span>
+        </button>
+        <GlobalSearch />
+        <button onClick={toggleDark}
+          style={{
+            background: "none", border: "1.5px solid var(--app-border)",
+            borderRadius: "clamp(8px, 1.2vw, 10px)", padding: "clamp(0.3rem, 0.5vw, 0.4rem) clamp(0.5rem, 0.8vw, 0.7rem)",
+            cursor: "pointer", fontSize: "clamp(0.8rem, 1.1vw, 0.9rem)",
+            color: "var(--app-muted)", fontFamily: "inherit",
+            display: "flex", alignItems: "center",
+            transition: "all 0.15s",
+          }}>
+          {dark ? <Sun size={15} /> : <Moon size={15} />}
         </button>
       </div>
       <ProfileModal open={profileOpen} onClose={() => setProfileOpen(false)} />
