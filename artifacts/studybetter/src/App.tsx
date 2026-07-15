@@ -554,6 +554,13 @@ function App() {
 
   useEffect(() => { fetchMe(); }, [fetchMe]);
 
+  useEffect(() => {
+    const id = setInterval(() => { fetchMe(); }, 5 * 60 * 1000);
+    return () => clearInterval(id);
+  }, [fetchMe]);
+
+  useEffect(() => { if (initialized && user) fetchMe(); }, [location]);
+
   useKeyboardShortcuts([
     { key: "k", ctrl: true, handler: () => setSidebarOpen(o => !o) },
     { key: "d", ctrl: true, handler: () => toggleDark() },
