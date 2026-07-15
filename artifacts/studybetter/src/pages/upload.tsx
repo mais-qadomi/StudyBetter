@@ -857,14 +857,6 @@ export default function UploadPage() {
   const [pageDragActive, setPageDragActive] = useState(false);
   const dragCounterRef = useRef(0);
 
-  if (restoring) {
-    return (
-      <div dir="rtl" style={{ ...S.page, justifyContent: "center" }}>
-        <p style={{ ...S.loadingText, display: "inline-flex", alignItems: "center", gap: "8px" }}><Loader2 size={18} style={{ animation: "spin 1s linear infinite" }} /> جاري استعادة جلستك السابقة…</p>
-      </div>
-    );
-  }
-
   const handlePageDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     dragCounterRef.current++;
@@ -888,6 +880,14 @@ export default function UploadPage() {
     const f = e.dataTransfer.files[0];
     if (f) void loadFile(f);
   }, [loadFile]);
+
+  if (restoring) {
+    return (
+      <div dir="rtl" style={{ ...S.page, justifyContent: "center" }}>
+        <p style={{ ...S.loadingText, display: "inline-flex", alignItems: "center", gap: "8px" }}><Loader2 size={18} style={{ animation: "spin 1s linear infinite" }} /> جاري استعادة جلستك السابقة…</p>
+      </div>
+    );
+  }
 
   return (
     <div dir="rtl" style={S.page}
