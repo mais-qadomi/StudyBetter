@@ -27,6 +27,8 @@ import { callExplain, type PageResultUI } from "../lib/explain";
 import { classifyPage, capturePageCanvas, type PageType } from "../lib/pdf-page-analyzer";
 import { Folder as FolderIcon, FolderOpen as FolderOpenIcon, ChevronLeft, Loader2, Trash2, CheckCircle, Rocket, AlertTriangle, FileUp, Paperclip, Globe, GraduationCap, RefreshCw, Sparkles, ArrowRight, Lightbulb, StickyNote, TriangleAlert, Zap, Image } from "lucide-react";
 import { useApp } from "../App";
+import { useToast } from "../stores/toastStore";
+import { DragOverlay } from "../components/DragOverlay";
 
 pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
 
@@ -74,9 +76,11 @@ const S = {
     alignItems: "center",
     justifyContent: "space-between",
     marginBottom: "1rem",
+    flexWrap: "wrap" as const,
+    gap: "0.5rem",
   },
   title: {
-    fontSize: "1.8rem",
+    fontSize: "clamp(1.2rem, 4vw, 1.8rem)",
     fontWeight: 800,
     color: C.title,
     margin: 0,
@@ -595,6 +599,7 @@ export default function UploadPage() {
   const [bulkProgress, setBulkProgress] = useState<{ current: number; total: number } | null>(null);
 
   const pageTextsRef = useRef<Record<number, string>>({});
+  const pageTypesRef = useRef<Record<number, "text" | "image" | "mixed">>({});
   useEffect(() => {
     void apiGetProjects().then(list => {
       setProjects(list);
@@ -677,11 +682,16 @@ export default function UploadPage() {
   }, []);
 
   const { setSidebarOpen } = useApp();
+  const addToast = useToast(s => s.addToast);
 
   const loadFile = useCallback(async (f: File) => {
-    if (!f.type.includes("pdf")) return;
+    if (!f.type.includes("pdf")) {
+      addToast("يرجى اختيار ملف PDF فقط", "error");
+      return;
+    }
     if (f.size > MAX_FILE_BYTES) {
       setFileError(`حجم الملف (${(f.size / 1024 / 1024).toFixed(1)} MB) يتجاوز الحد الأقصى المسموح به (${MAX_FILE_MB} MB). الرجاء اختيار ملف أصغر حجماً.`);
+      addToast(`حجم الملف يتجاوز ${MAX_FILE_MB} MB`, "error");
       return;
     }
     setFileError("");
@@ -740,9 +750,10 @@ export default function UploadPage() {
     }
   }, [file]);
 
-  const handleTextReady = useCallback((pageNum: number, text: string) => {
+  const handleTextReady = useCallback((pageNum: number, text: string, pageType?: "text" | "image" | "mixed") => {
     pageTextsRef.current[pageNum] = text;
     setPageTexts(prev => ({ ...prev, [pageNum]: text }));
+    if (pageType) pageTypesRef.current[pageNum] = pageType;
     const sid = sessionIdRef.current;
     if (sid) {
       void apiSavePage(sid, pageNum, { extractedText: text });
@@ -796,11 +807,17 @@ export default function UploadPage() {
       if (!pageResults[i]?.explanation) toProcess.push(i);
     }
     if (toProcess.length === 0) return;
-    for (let idx = 0; idx < toProcess.length; idx++) {
-      const pageNum = toProcess[idx];
-      setBulkProgress({ current: idx + 1, total: toProcess.length });
+    const imagePages = toProcess.filter(pn => {
+      const t = pageTypesRef.current[pn];
+      const text = pageTextsRef.current[pn] ?? "";
+      return (t === "image" || t === "mixed" || !text.trim()) && t !== "text";
+    });
+    const textPages = toProcess.filter(pn => !imagePages.includes(pn));
+    for (let idx = 0; idx < textPages.length; idx++) {
+      const pageNum = textPages[idx];
+      setBulkProgress({ current: idx + 1, total: textPages.length });
       await explainOnePage(pageNum);
-      if (idx < toProcess.length - 1) await sleep(DELAY_BETWEEN_PAGES_MS);
+      if (idx < textPages.length - 1) await sleep(DELAY_BETWEEN_PAGES_MS);
     }
     setBulkProgress(null);
   }, [bulkProgress, numPages, pageResults, explainOnePage]);
@@ -824,13 +841,21 @@ export default function UploadPage() {
     pageTextsRef.current = {};
   }, [fileUrl]);
 
-  const pageWidth = Math.min(typeof window !== "undefined" ? window.innerWidth - 64 : 820, 820);
+  const [pageWidth, setPageWidth] = useState(() => Math.min(typeof window !== "undefined" ? window.innerWidth - 64 : 820, 820));
+  useEffect(() => {
+    const handler = () => setPageWidth(Math.min(window.innerWidth - 64, 820));
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
   const isBulkBusy = bulkProgress !== null;
   const explainedCount = Object.values(pageResults).filter(r => r.explanation).length;
   const hasAnyResults = explainedCount > 0;
   const pendingPages = numPages > 0
     ? Array.from({ length: numPages }, (_, i) => i + 1).filter(i => !pageResults[i]?.explanation).length
     : 0;
+
+  const [pageDragActive, setPageDragActive] = useState(false);
+  const dragCounterRef = useRef(0);
 
   if (restoring) {
     return (
@@ -840,8 +865,37 @@ export default function UploadPage() {
     );
   }
 
+  const handlePageDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    dragCounterRef.current++;
+    if (e.dataTransfer.types.includes("Files")) setPageDragActive(true);
+  }, []);
+
+  const handlePageDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    dragCounterRef.current--;
+    if (dragCounterRef.current === 0) setPageDragActive(false);
+  }, []);
+
+  const handlePageDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+  }, []);
+
+  const handlePageDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    dragCounterRef.current = 0;
+    setPageDragActive(false);
+    const f = e.dataTransfer.files[0];
+    if (f) void loadFile(f);
+  }, [loadFile]);
+
   return (
-    <div dir="rtl" style={S.page}>
+    <div dir="rtl" style={S.page}
+      onDragEnter={handlePageDragEnter}
+      onDragLeave={handlePageDragLeave}
+      onDragOver={handlePageDragOver}
+      onDrop={handlePageDrop}
+    >
       <div style={S.header}>
         <h1 style={S.title}>رفع ملف PDF</h1>
         <div style={{ display: "flex", gap: "0.5rem" }}>
@@ -850,10 +904,10 @@ export default function UploadPage() {
               style={{ ...S.backBtn, background: "var(--app-error-bg)", border: "1px solid var(--app-error-border)", color: "var(--app-error-text)" }}
               onClick={() => void handleReset()}
             >
-              <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}><Trash2 size={16} /> مسح وبدء من جديد</span>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}><Trash2 size={16} /><span className="upload-btn-text"> مسح وبدء من جديد</span></span>
             </button>
           )}
-          <button style={S.backBtn} onClick={() => navigate("/")}><span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}><ArrowRight size={16} /> الرئيسية</span></button>
+          <button style={S.backBtn} onClick={() => navigate("/")}><span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}><ArrowRight size={16} /><span className="upload-btn-text"> الرئيسية</span></span></button>
         </div>
       </div>
       {!file && projects.length > 0 && (
@@ -1012,10 +1066,14 @@ export default function UploadPage() {
         </div>
       )}
 
+      <DragOverlay visible={pageDragActive} />
       <style>{`
         .react-pdf__Page { background: transparent !important; }
         .react-pdf__Page canvas { display: block; }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @media (max-width: 480px) {
+          .upload-btn-text { display: none; }
+        }
       `}</style>
     </div>
   );
