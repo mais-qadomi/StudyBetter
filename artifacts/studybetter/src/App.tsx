@@ -352,7 +352,7 @@ function HomePage() {
 
   const todayKey = getTodayKey();
   const last7 = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(); d.setDate(d.getDate() - (6 - i));
+    const d = new Date(); d.setDate(d.getDate() - i);
     const key = d.toISOString().slice(0, 10);
     const found = focusHistory.find(f => f.date === key);
     return { key, minutes: found?.minutes ?? 0, label: d.toLocaleDateString("ar", { weekday: "short" }), isToday: key === todayKey };

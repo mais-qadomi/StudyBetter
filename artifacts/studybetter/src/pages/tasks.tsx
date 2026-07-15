@@ -168,7 +168,7 @@ export default function TasksPage() {
 
     const todayKey = getTodayKey();
     const last7 = Array.from({ length: 7 }, (_, i) => {
-        const d = new Date(); d.setDate(d.getDate() - (6 - i));
+        const d = new Date(); d.setDate(d.getDate() - i);
         const key = d.toISOString().slice(0, 10);
         const found = focusHistory.find(f => f.date === key);
         return { key, minutes: found?.minutes ?? 0, label: d.toLocaleDateString("ar", { weekday: "short" }) };
@@ -389,7 +389,7 @@ export default function TasksPage() {
                         {/* Controls */}
                         <div style={{ display: "flex", gap: "0.75rem" }}>
                             <button onClick={() => setRunning(r => !r)} style={{
-                                background: running ? "linear-gradient(135deg, var(--app-red), #dc2626)" : "linear-gradient(135deg, var(--app-primary-light), var(--app-primary))",
+                                background: running ? "linear-gradient(135deg, var(--app-red), var(--app-danger))" : "linear-gradient(135deg, var(--app-primary-light), var(--app-primary))",
                                 color: "#fff", border: "none", borderRadius: "12px",
                                 padding: "0.7rem 1.8rem", fontSize: "1rem", cursor: "pointer", fontWeight: 700,
                                 boxShadow: "0 4px 15px rgba(40,120,200,0.3)",
