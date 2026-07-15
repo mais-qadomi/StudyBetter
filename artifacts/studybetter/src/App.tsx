@@ -137,21 +137,6 @@ function GlobalHeader() {
       gap: "clamp(0.3rem, 0.8vw, 0.5rem)",
     }}>
       <div style={{ display: "flex", alignItems: "center", gap: "clamp(0.75rem, 1.5vw, 1.5rem)" }}>
-        <div className="hdr-stats" style={{ display: "flex", alignItems: "center", gap: "clamp(0.75rem, 1.5vw, 1.5rem)" }}>
-          <div className="hdr-pomo" style={{ textAlign: "center" }}>
-            <div style={{ fontSize: "clamp(0.78rem, 1.1vw, 0.9rem)", color: "var(--app-muted)", fontWeight: 700, marginBottom: "2px", display: "flex", alignItems: "center", gap: "4px" }}>
-              <Clock size={14} /> {running ? "جاري التركيز" : "البومودورو"}
-            </div>
-            <div style={{ fontSize: "clamp(1.3rem, 2.2vw, 1.8rem)", fontWeight: 800, color: running ? modeColor : "var(--app-muted-light)", fontFamily: "monospace", letterSpacing: "2px" }}>
-              {mins}:{secs}
-            </div>
-          </div>
-          <div style={{ textAlign: "left" }}>
-            <div style={{ fontSize: "clamp(0.78rem, 1.1vw, 0.9rem)", color: "var(--app-muted)", fontWeight: 700 }}>تركيز اليوم</div>
-            <div style={{ fontSize: "clamp(1.2rem, 2vw, 1.6rem)", fontWeight: 800, color: "var(--app-primary)" }}>{todayFocusMin} د</div>
-          </div>
-        </div>
-
         {user && (
           <div ref={menuRef} style={{ position: "relative" }}>
             <button
@@ -231,6 +216,20 @@ function GlobalHeader() {
             </AnimatePresence>
           </div>
         )}
+        <div className="hdr-stats" style={{ display: "flex", alignItems: "center", gap: "clamp(0.75rem, 1.5vw, 1.5rem)" }}>
+          <div className="hdr-pomo" style={{ textAlign: "center" }}>
+            <div style={{ fontSize: "clamp(0.78rem, 1.1vw, 0.9rem)", color: "var(--app-muted)", fontWeight: 700, marginBottom: "2px", display: "flex", alignItems: "center", gap: "4px" }}>
+              <Clock size={14} /> {running ? "جاري التركيز" : "البومودورو"}
+            </div>
+            <div style={{ fontSize: "clamp(1.3rem, 2.2vw, 1.8rem)", fontWeight: 800, color: running ? modeColor : "var(--app-muted-light)", fontFamily: "monospace", letterSpacing: "2px" }}>
+              {mins}:{secs}
+            </div>
+          </div>
+          <div style={{ textAlign: "left" }}>
+            <div style={{ fontSize: "clamp(0.78rem, 1.1vw, 0.9rem)", color: "var(--app-muted)", fontWeight: 700 }}>تركيز اليوم</div>
+            <div style={{ fontSize: "clamp(1.2rem, 2vw, 1.6rem)", fontWeight: 800, color: "var(--app-primary)" }}>{todayFocusMin} د</div>
+          </div>
+        </div>
       </div>
       <div className="hdr-date" style={{ textAlign: "center", flex: 1 }}>
         <div style={{ fontSize: "clamp(1.5rem, 2.8vw, 2.2rem)", fontWeight: 800, color: "var(--app-text)", letterSpacing: "2px", fontFamily: "monospace" }}>{timeStr}</div>
@@ -238,18 +237,6 @@ function GlobalHeader() {
         <div style={{ fontSize: "clamp(0.72rem, 1vw, 0.85rem)", color: "var(--app-muted-light)" }}>{getHijriDate()}</div>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: "clamp(0.2rem, 0.5vw, 0.4rem)" }}>
-        <button onClick={() => setSidebarOpen(o => !o)}
-          style={{
-            background: "var(--app-accent-bg)", border: "1.5px solid var(--app-accent-light)",
-            borderRadius: "clamp(8px, 1.2vw, 10px)", padding: "clamp(0.3rem, 0.5vw, 0.4rem) clamp(0.5rem, 1vw, 0.8rem)",
-            cursor: "pointer", fontSize: "clamp(0.75rem, 1.1vw, 0.9rem)", fontWeight: 700,
-            color: "var(--app-accent)", fontFamily: "inherit",
-            display: "flex", alignItems: "center", gap: "4px",
-            transition: "all 0.15s", whiteSpace: "nowrap",
-          }}>
-          <FolderOpen size={15} /> <span className="hdr-label" style={{ display: "inline" }}>ملفاتي</span>
-        </button>
-        <GlobalSearch />
         <button onClick={toggleDark}
           style={{
             background: "none", border: "1.5px solid var(--app-border)",
@@ -260,6 +247,18 @@ function GlobalHeader() {
             transition: "all 0.15s",
           }}>
           {dark ? <Sun size={15} /> : <Moon size={15} />}
+        </button>
+        <GlobalSearch />
+        <button onClick={() => setSidebarOpen(o => !o)}
+          style={{
+            background: "var(--app-accent-bg)", border: "1.5px solid var(--app-accent-light)",
+            borderRadius: "clamp(8px, 1.2vw, 10px)", padding: "clamp(0.3rem, 0.5vw, 0.4rem) clamp(0.5rem, 1vw, 0.8rem)",
+            cursor: "pointer", fontSize: "clamp(0.75rem, 1.1vw, 0.9rem)", fontWeight: 700,
+            color: "var(--app-accent)", fontFamily: "inherit",
+            display: "flex", alignItems: "center", gap: "4px",
+            transition: "all 0.15s", whiteSpace: "nowrap",
+          }}>
+          <FolderOpen size={15} /> <span className="hdr-label" style={{ display: "inline" }}>ملفاتي</span>
         </button>
       </div>
       <ProfileModal open={profileOpen} onClose={() => setProfileOpen(false)} />
