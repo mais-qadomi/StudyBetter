@@ -136,25 +136,6 @@ function GlobalHeader() {
       display: "flex", alignItems: "center", justifyContent: "space-between",
       gap: "clamp(0.3rem, 0.8vw, 0.5rem)",
     }}>
-      <div style={{ display: "flex", alignItems: "center", gap: "clamp(0.2rem, 0.5vw, 0.4rem)" }}>
-        <button onClick={() => setSidebarOpen(o => !o)}
-          style={{
-            background: "var(--app-accent-bg)", border: "1.5px solid var(--app-accent-light)",
-            borderRadius: "clamp(8px, 1.2vw, 10px)", padding: "clamp(0.3rem, 0.5vw, 0.4rem) clamp(0.5rem, 1vw, 0.8rem)",
-            cursor: "pointer", fontSize: "clamp(0.75rem, 1.1vw, 0.9rem)", fontWeight: 700,
-            color: "var(--app-accent)", fontFamily: "inherit",
-            display: "flex", alignItems: "center", gap: "4px",
-            transition: "all 0.15s", whiteSpace: "nowrap",
-          }}>
-          <FolderOpen size={15} /> <span className="hdr-label" style={{ display: "inline" }}>ملفاتي</span>
-        </button>
-      </div>
-      <div className="hdr-date" style={{ textAlign: "center", flex: 1 }}>
-        <div style={{ fontSize: "clamp(1.5rem, 2.8vw, 2.2rem)", fontWeight: 800, color: "var(--app-text)", letterSpacing: "2px", fontFamily: "monospace" }}>{timeStr}</div>
-        <div style={{ fontSize: "clamp(0.8rem, 1.3vw, 1rem)", color: "var(--app-muted)", fontWeight: 600 }}>{getArabicDate()}</div>
-        <div style={{ fontSize: "clamp(0.72rem, 1vw, 0.85rem)", color: "var(--app-muted-light)" }}>{getHijriDate()}</div>
-      </div>
-
       <div style={{ display: "flex", alignItems: "center", gap: "clamp(0.75rem, 1.5vw, 1.5rem)" }}>
         <GlobalSearch />
         <button onClick={toggleDark}
@@ -262,6 +243,24 @@ function GlobalHeader() {
             </AnimatePresence>
           </div>
         )}
+      </div>
+      <div className="hdr-date" style={{ textAlign: "center", flex: 1 }}>
+        <div style={{ fontSize: "clamp(1.5rem, 2.8vw, 2.2rem)", fontWeight: 800, color: "var(--app-text)", letterSpacing: "2px", fontFamily: "monospace" }}>{timeStr}</div>
+        <div style={{ fontSize: "clamp(0.8rem, 1.3vw, 1rem)", color: "var(--app-muted)", fontWeight: 600 }}>{getArabicDate()}</div>
+        <div style={{ fontSize: "clamp(0.72rem, 1vw, 0.85rem)", color: "var(--app-muted-light)" }}>{getHijriDate()}</div>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: "clamp(0.2rem, 0.5vw, 0.4rem)" }}>
+        <button onClick={() => setSidebarOpen(o => !o)}
+          style={{
+            background: "var(--app-accent-bg)", border: "1.5px solid var(--app-accent-light)",
+            borderRadius: "clamp(8px, 1.2vw, 10px)", padding: "clamp(0.3rem, 0.5vw, 0.4rem) clamp(0.5rem, 1vw, 0.8rem)",
+            cursor: "pointer", fontSize: "clamp(0.75rem, 1.1vw, 0.9rem)", fontWeight: 700,
+            color: "var(--app-accent)", fontFamily: "inherit",
+            display: "flex", alignItems: "center", gap: "4px",
+            transition: "all 0.15s", whiteSpace: "nowrap",
+          }}>
+          <FolderOpen size={15} /> <span className="hdr-label" style={{ display: "inline" }}>ملفاتي</span>
+        </button>
       </div>
       <ProfileModal open={profileOpen} onClose={() => setProfileOpen(false)} />
       <style>{`
