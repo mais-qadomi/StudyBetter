@@ -1,14 +1,46 @@
-import { Switch, Route, Link } from "wouter";
-import UploadPage from "./pages/upload";
-import FileHubPage from "./pages/file-hub";
-import { useState, useEffect, useRef, createContext, useContext, useCallback } from "react";
-import ProjectsPage from "./pages/projects";
+import { Switch, Route, Link, useLocation } from "wouter";
+import { lazy, Suspense, useState, useEffect, useRef, createContext, useContext, useCallback } from "react";
 import FileSidebar from "./components/FileSidebar";
 import PomodoroTimer from "./components/PomodoroTimer";
 import TaskList from "./components/TaskList";
 import FocusChart from "./components/FocusChart";
-import { Clock, FolderOpen, FileText, Brain, Layers, Sparkles, Moon, Sun } from "lucide-react";
-import { motion } from "framer-motion";
+import { Clock, FolderOpen, FileText, Brain, Layers, Sparkles, Moon, Sun, LogOut, User, ChevronDown, Settings } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { useAuth } from "./stores/authStore";
+import ProfileModal from "./components/ProfileModal";
+import ToastContainer from "./components/ToastContainer";
+import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
+import ErrorBoundary from "./components/ErrorBoundary";
+import { ConfirmProvider } from "./components/ConfirmDialog";
+import GlobalSearch from "./components/GlobalSearch";
+import RecentFiles from "./components/RecentFiles";
+
+const LoginPage = lazy(() => import("./pages/login"));
+const RegisterPage = lazy(() => import("./pages/register"));
+const SettingsPage = lazy(() => import("./pages/settings"));
+const ForgotPasswordPage = lazy(() => import("./pages/forgot-password"));
+const ResetPasswordPage = lazy(() => import("./pages/reset-password"));
+const AuthCallbackPage = lazy(() => import("./pages/auth-callback"));
+const NotFoundPage = lazy(() => import("./pages/not-found"));
+const UploadPage = lazy(() => import("./pages/upload"));
+const FileHubPage = lazy(() => import("./pages/file-hub"));
+const StudioPage = lazy(() => import("./pages/studio"));
+
+function PageLoader() {
+  return (
+    <div style={{
+      minHeight: "60vh", display: "flex", alignItems: "center", justifyContent: "center",
+      color: "var(--app-muted)", fontSize: "0.9rem", fontWeight: 600,
+    }}>
+      <div style={{
+        width: "24px", height: "24px", border: "3px solid var(--app-border)",
+        borderTopColor: "var(--app-accent)", borderRadius: "50%",
+        animation: "spin 0.6s linear infinite",
+      }} />
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
+}
 
 export type Task = { id: string; text: string; done: boolean };
 export type DayFocus = { date: string; minutes: number };
@@ -68,57 +100,76 @@ function getMotivation(todayMin: number, yesterdayMin: number): string {
 // ── Header ──────────────────
 function GlobalHeader() {
   const { todayFocusMin, seconds, running, mode, setSidebarOpen, dark, toggleDark } = useApp();
+  const { user, logout } = useAuth();
+  const [, navigate] = useLocation();
   const [now, setNow] = useState(new Date());
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(t);
   }, []);
 
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+    }
+    if (menuOpen) document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [menuOpen]);
+
   const mins = String(Math.floor(seconds / 60)).padStart(2, "0");
   const secs = String(seconds % 60).padStart(2, "0");
   const modeColor = mode === "work" ? "var(--app-work)" : mode === "short" ? "var(--app-short)" : "var(--app-long)";
   const timeStr = now.toLocaleTimeString("ar", { hour: "2-digit", minute: "2-digit" });
 
+  const avatarColor = user ? `hsl(${user.name.charCodeAt(0) * 37 % 360}, 55%, 55%)` : "var(--app-accent)";
+  const avatarInitial = user?.name?.charAt(0) || "؟";
+
   return (
     <div style={{
       position: "sticky", top: 0, zIndex: 100,
       background: "var(--app-card)", backdropFilter: "blur(10px)",
-      borderBottom: "1.5px solid var(--app-border)", padding: "0.6rem 1.5rem",
+      borderBottom: "1.5px solid var(--app-border)", padding: "clamp(0.4rem, 1vw, 0.6rem) clamp(0.8rem, 2vw, 1.5rem)",
       display: "flex", alignItems: "center", justifyContent: "space-between",
-      gap: "0.5rem",
+      gap: "clamp(0.3rem, 0.8vw, 0.5rem)",
     }}>
-      <button onClick={() => setSidebarOpen(o => !o)}
-        style={{
-          background: "var(--app-accent-bg)", border: "1.5px solid var(--app-accent-light)",
-          borderRadius: "10px", padding: "0.4rem 0.8rem",
-          cursor: "pointer", fontSize: "0.9rem", fontWeight: 700,
-          color: "var(--app-accent)", fontFamily: "inherit",
-          display: "flex", alignItems: "center", gap: "5px",
-          transition: "all 0.15s", whiteSpace: "nowrap",
-        }}>
-        <FolderOpen size={16} /> ملفاتي
-      </button>
-      <button onClick={toggleDark}
-        style={{
-          background: "none", border: "1.5px solid var(--app-border)",
-          borderRadius: "10px", padding: "0.4rem 0.7rem",
-          cursor: "pointer", fontSize: "0.9rem",
-          color: "var(--app-muted)", fontFamily: "inherit",
-          display: "flex", alignItems: "center",
-          transition: "all 0.15s",
-        }}>
-        {dark ? <Sun size={16} /> : <Moon size={16} />}
-      </button>
-
-      <div style={{ textAlign: "center", flex: 1 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "clamp(0.2rem, 0.5vw, 0.4rem)" }}>
+        <button onClick={() => setSidebarOpen(o => !o)}
+          style={{
+            background: "var(--app-accent-bg)", border: "1.5px solid var(--app-accent-light)",
+            borderRadius: "clamp(8px, 1.2vw, 10px)", padding: "clamp(0.3rem, 0.5vw, 0.4rem) clamp(0.5rem, 1vw, 0.8rem)",
+            cursor: "pointer", fontSize: "clamp(0.75rem, 1.1vw, 0.9rem)", fontWeight: 700,
+            color: "var(--app-accent)", fontFamily: "inherit",
+            display: "flex", alignItems: "center", gap: "4px",
+            transition: "all 0.15s", whiteSpace: "nowrap",
+          }}>
+          <FolderOpen size={15} /> <span className="hdr-label" style={{ display: "inline" }}>ملفاتي</span>
+        </button>
+      </div>
+      <div className="hdr-date" style={{ textAlign: "center", flex: 1 }}>
         <div style={{ fontSize: "clamp(1.5rem, 2.8vw, 2.2rem)", fontWeight: 800, color: "var(--app-text)", letterSpacing: "2px", fontFamily: "monospace" }}>{timeStr}</div>
         <div style={{ fontSize: "clamp(0.8rem, 1.3vw, 1rem)", color: "var(--app-muted)", fontWeight: 600 }}>{getArabicDate()}</div>
         <div style={{ fontSize: "clamp(0.72rem, 1vw, 0.85rem)", color: "var(--app-muted-light)" }}>{getHijriDate()}</div>
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: "clamp(0.75rem, 1.5vw, 1.5rem)" }}>
-        <div style={{ textAlign: "center" }}>
+        <GlobalSearch />
+        <button onClick={toggleDark}
+          style={{
+            background: "none", border: "1.5px solid var(--app-border)",
+            borderRadius: "clamp(8px, 1.2vw, 10px)", padding: "clamp(0.3rem, 0.5vw, 0.4rem) clamp(0.5rem, 0.8vw, 0.7rem)",
+            cursor: "pointer", fontSize: "clamp(0.8rem, 1.1vw, 0.9rem)",
+            color: "var(--app-muted)", fontFamily: "inherit",
+            display: "flex", alignItems: "center",
+            transition: "all 0.15s",
+          }}>
+          {dark ? <Sun size={15} /> : <Moon size={15} />}
+        </button>
+        <div className="hdr-stats" style={{ display: "flex", alignItems: "center", gap: "clamp(0.75rem, 1.5vw, 1.5rem)" }}>
+        <div className="hdr-pomo" style={{ textAlign: "center" }}>
           <div style={{ fontSize: "clamp(0.78rem, 1.1vw, 0.9rem)", color: "var(--app-muted)", fontWeight: 700, marginBottom: "2px", display: "flex", alignItems: "center", gap: "4px" }}>
             <Clock size={14} /> {running ? "جاري التركيز" : "البومودورو"}
           </div>
@@ -130,7 +181,100 @@ function GlobalHeader() {
           <div style={{ fontSize: "clamp(0.78rem, 1.1vw, 0.9rem)", color: "var(--app-muted)", fontWeight: 700 }}>تركيز اليوم</div>
           <div style={{ fontSize: "clamp(1.2rem, 2vw, 1.6rem)", fontWeight: 800, color: "var(--app-primary)" }}>{todayFocusMin} د</div>
         </div>
+        </div>
+
+        {user && (
+          <div ref={menuRef} style={{ position: "relative" }}>
+            <button
+              onClick={() => setMenuOpen(o => !o)}
+              style={{
+                display: "flex", alignItems: "center", gap: "0.4rem",
+                background: "none", border: "1.5px solid transparent",
+                borderRadius: "10px", padding: "0.3rem 0.5rem",
+                cursor: "pointer", fontFamily: "inherit",
+                transition: "all 0.15s",
+                borderColor: menuOpen ? "var(--app-border)" : "transparent",
+              }}
+            >
+              {user.avatarUrl ? (
+                <img src={user.avatarUrl} alt="" style={{ width: "32px", height: "32px", borderRadius: "50%", objectFit: "cover" }} />
+              ) : (
+                <div style={{
+                  width: "32px", height: "32px", borderRadius: "50%",
+                  background: avatarColor, color: "#fff",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: "0.85rem", fontWeight: 700,
+                }}>
+                  {avatarInitial}
+                </div>
+              )}
+              <ChevronDown size={14} color="var(--app-muted)" style={{ transition: "transform 0.2s", transform: menuOpen ? "rotate(180deg)" : "none" }} />
+            </button>
+
+            <AnimatePresence>
+              {menuOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: -8, scale: 0.96 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -8, scale: 0.96 }}
+                  transition={{ duration: 0.15 }}
+                  style={{
+                    position: "absolute", top: "100%", left: 0, marginTop: "0.4rem",
+                    background: "var(--app-card)", border: "1.5px solid var(--app-border)",
+                    borderRadius: "12px", padding: "0.5rem", minWidth: "200px",
+                    boxShadow: "0 8px 30px rgba(0,0,0,0.12)", zIndex: 200,
+                  }}
+                >
+                  <div style={{ padding: "0.5rem 0.7rem", borderBottom: "1px solid var(--app-border)", marginBottom: "0.3rem" }}>
+                    <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--app-text)" }}>{user.name}</div>
+                    <div style={{ fontSize: "0.75rem", color: "var(--app-muted)", direction: "ltr", textAlign: "left" }}>{user.email}</div>
+                  </div>
+                  <button onClick={() => { setMenuOpen(false); setProfileOpen(true); }}
+                    style={{
+                      width: "100%", display: "flex", alignItems: "center", gap: "0.5rem",
+                      padding: "0.5rem 0.7rem", borderRadius: "8px", border: "none",
+                      background: "none", cursor: "pointer", fontSize: "0.85rem",
+                      color: "var(--app-text)", fontFamily: "inherit", textAlign: "right",
+                    }}>
+                    <User size={15} /> الملف الشخصي
+                  </button>
+                  <button onClick={() => { setMenuOpen(false); navigate("/settings"); }}
+                    style={{
+                      width: "100%", display: "flex", alignItems: "center", gap: "0.5rem",
+                      padding: "0.5rem 0.7rem", borderRadius: "8px", border: "none",
+                      background: "none", cursor: "pointer", fontSize: "0.85rem",
+                      color: "var(--app-text)", fontFamily: "inherit", textAlign: "right",
+                    }}>
+                    <Settings size={15} /> الإعدادات
+                  </button>
+                  <button onClick={async () => { setMenuOpen(false); await logout(); }}
+                    style={{
+                      width: "100%", display: "flex", alignItems: "center", gap: "0.5rem",
+                      padding: "0.5rem 0.7rem", borderRadius: "8px", border: "none",
+                      background: "none", cursor: "pointer", fontSize: "0.85rem",
+                      color: "var(--app-red)", fontFamily: "inherit", textAlign: "right",
+                    }}
+                  >
+                    <LogOut size={15} /> تسجيل الخروج
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        )}
       </div>
+      <ProfileModal open={profileOpen} onClose={() => setProfileOpen(false)} />
+      <style>{`
+        @media (max-width: 640px) {
+          .hdr-label { display: none !important; }
+          .hdr-search-kbd { display: none !important; }
+          .hdr-stats { display: none !important; }
+          .hdr-date { display: none !important; }
+        }
+        @media (max-width: 480px) {
+          .hdr-pomo { display: none !important; }
+        }
+      `}</style>
     </div>
   );
 }
@@ -228,15 +372,15 @@ function HomePage() {
     }}>
       <div style={{
         background: "var(--app-card)", borderBottom: "1px solid var(--app-border)",
-        padding: "0.6rem 1.5rem", textAlign: "center",
-        fontSize: "clamp(0.85rem, 1.2vw, 1rem)", color: "var(--app-muted)", fontWeight: 600,
+        padding: "0.2rem 1rem", textAlign: "center",
+        fontSize: "clamp(0.65rem, 0.9vw, 0.75rem)", color: "var(--app-muted)", fontWeight: 600,
       }}>{motivation}</div>
 
-      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }} style={{ flex: 1, maxWidth: "1400px", margin: "0 auto", padding: "clamp(1rem, 2vw, 2rem) clamp(0.75rem, 3vw, 2rem)", display: "flex", flexDirection: "column", gap: "clamp(1rem, 2vw, 2rem)", width: "100%", boxSizing: "border-box" }}>
+      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }} style={{ flex: 1, maxWidth: "1400px", margin: "0 auto", padding: "clamp(0.6rem, 1.5vw, 1rem) clamp(0.75rem, 3vw, 2rem)", display: "flex", flexDirection: "column", gap: "clamp(0.6rem, 1.5vw, 1rem)", width: "100%", boxSizing: "border-box" }}>
 
         {/* Welcome */}
-        <div style={{ background: "var(--app-card)", border: "1.5px solid var(--app-border)", borderRadius: "20px", padding: "2rem 3rem", textAlign: "center", boxShadow: "var(--app-shadow)" }}>
-          <p style={{ fontSize: "clamp(1.1rem, 1.6vw, 1.4rem)", fontWeight: 700, color: "var(--app-text)", lineHeight: 2, margin: "0 auto", maxWidth: "65ch" }}>
+        <div style={{ background: "var(--app-card)", border: "1.5px solid var(--app-border)", borderRadius: "14px", padding: "1rem 1.5rem", textAlign: "center", boxShadow: "var(--app-shadow)" }}>
+          <p style={{ fontSize: "clamp(0.75rem, 1vw, 0.9rem)", fontWeight: 700, color: "var(--app-text)", lineHeight: 1.6, margin: "0 auto", maxWidth: "65ch" }}>
             يا طالبَ العلم، النسخةُ التي تحلم أن تصبحها أعينك على بنائها هنا، فاستبشر خيرًا وأقبِل.
           </p>
         </div>
@@ -244,8 +388,11 @@ function HomePage() {
         {/* Chart */}
         <FocusChart data={last7} />
 
+        {/* Recent files */}
+        <RecentFiles />
+
         {/* Tasks + Pomodoro */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 300px), 1fr))", gap: "clamp(0.8rem, 1.5vw, 1.5rem)" }}>
           <TaskList
             tasks={tasks}
             activeTaskId={activeTaskId}
@@ -272,18 +419,18 @@ function HomePage() {
         </div>
 
         {/* Feature cards */}
-        <div style={{ background: "var(--app-card)", border: "1.5px solid var(--app-border)", borderRadius: "20px", padding: "2rem 3rem", boxShadow: "var(--app-shadow)", marginBottom: "2rem" }}>
-          <p style={{ fontSize: "1.15rem", fontWeight: 800, color: "var(--app-text)", margin: "0 0 1.2rem", textAlign: "center" }}>بشو حاب تبلش؟</p>
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.85rem" }}>
-            <Link to="/upload" style={{ display: "block", background: "linear-gradient(135deg, var(--app-primary-light), var(--app-primary))", color: "#fff", borderRadius: "14px", padding: "0.9rem 1.5rem", fontSize: "1.05rem", fontWeight: 700, textDecoration: "none", textAlign: "center", boxShadow: "0 6px 20px var(--app-primary)", transition: "opacity 0.2s" }}
+        <div style={{ background: "var(--app-card)", border: "1.5px solid var(--app-border)", borderRadius: "clamp(14px, 2.5vw, 20px)", padding: "clamp(1rem, 2vw, 2rem) clamp(1rem, 2.5vw, 3rem)", boxShadow: "var(--app-shadow)", marginBottom: "2rem" }}>
+          <p style={{ fontSize: "clamp(0.95rem, 1.5vw, 1.15rem)", fontWeight: 800, color: "var(--app-text)", margin: "0 0 1rem", textAlign: "center" }}>بشو حاب تبلش؟</p>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "clamp(0.5rem, 1vw, 0.85rem)" }}>
+            <Link to="/upload" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem", background: "linear-gradient(135deg, var(--app-primary-light), var(--app-primary))", color: "#fff", borderRadius: "12px", padding: "clamp(0.7rem, 1.2vw, 1rem) clamp(0.8rem, 1.5vw, 1.5rem)", fontSize: "clamp(0.85rem, 1.2vw, 1rem)", fontWeight: 700, textDecoration: "none", textAlign: "center", boxShadow: "0 4px 16px var(--app-primary)", transition: "opacity 0.2s" }}
               onMouseEnter={e => (e.currentTarget.style.opacity = "0.88")}
               onMouseLeave={e => (e.currentTarget.style.opacity = "1")}>
-              <FileText size={20} style={{ verticalAlign: "middle" }} /> شرح ملف
+              <FileText size={18} /> شرح ملف
             </Link>
-            {[{ icon: Brain, label: "توليد أسئلة (Quiz)" }, { icon: Layers, label: "بطاقات مراجعة (Flashcards)" }, { icon: Sparkles, label: "ملخص ذكي" }].map(({ icon: Icon, label }) => (
-              <div key={label} style={{ background: "var(--app-bg)", border: "1.5px solid var(--app-border)", borderRadius: "14px", padding: "0.9rem 1.5rem", fontSize: "1.05rem", fontWeight: 600, color: "var(--app-muted-light)", textAlign: "center", cursor: "default", userSelect: "none" }}>
-                <Icon size={20} style={{ verticalAlign: "middle" }} /> {label}
-                <span style={{ fontSize: "0.75rem", marginRight: "0.5rem", background: "var(--app-accent-bg)", color: "var(--app-muted)", padding: "0.15rem 0.5rem", borderRadius: "6px", fontWeight: 700 }}>قريبًا</span>
+            {[{ icon: Brain, label: "توليد أسئلة (Quiz)" }, { icon: Layers, label: "بطاقات مراجعة" }, { icon: Sparkles, label: "ملخص ذكي" }].map(({ icon: Icon, label }) => (
+              <div key={label} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "0.4rem", background: "var(--app-bg)", border: "1.5px solid var(--app-border)", borderRadius: "12px", padding: "clamp(0.7rem, 1.2vw, 1rem) clamp(0.8rem, 1.5vw, 1.5rem)", fontSize: "clamp(0.85rem, 1.2vw, 1rem)", fontWeight: 600, color: "var(--app-muted-light)", textAlign: "center", cursor: "default", userSelect: "none" }}>
+                <Icon size={18} /> {label}
+                <span style={{ fontSize: "clamp(0.6rem, 0.8vw, 0.7rem)", background: "var(--app-accent-bg)", color: "var(--app-muted)", padding: "0.1rem 0.4rem", borderRadius: "5px", fontWeight: 700 }}>قريبًا</span>
               </div>
             ))}
           </div>
@@ -295,6 +442,8 @@ function HomePage() {
 
 // ── App ─────────────────────────
 function App() {
+  const { user, initialized, fetchMe } = useAuth();
+  const [location, navigate] = useLocation();
   const [tasks, setTasks] = useState<Task[]>(() => {
     try { return JSON.parse(localStorage.getItem("tasks") ?? "[]") as Task[]; }
     catch { return []; }
@@ -405,6 +554,15 @@ function App() {
   useEffect(() => { localStorage.setItem("focusHistory", JSON.stringify(focusHistory)); }, [focusHistory]);
   useEffect(() => { localStorage.setItem("pomo", JSON.stringify({ mode, endTime: endTimeRef.current, running, pomodoroCount })); }, [mode, running, pomodoroCount, endTimeRef]);
 
+  useEffect(() => { fetchMe(); }, [fetchMe]);
+
+  useKeyboardShortcuts([
+    { key: "k", ctrl: true, handler: () => setSidebarOpen(o => !o) },
+    { key: "d", ctrl: true, handler: () => toggleDark() },
+    { key: "n", ctrl: true, handler: () => navigate("/upload") },
+    { key: " ", handler: () => { if (document.activeElement?.tagName !== "INPUT") { setRunning(r => !r); } } },
+  ]);
+
   const addFocusMinutes = (mins: number) => {
     const today = getTodayKey();
     setFocusHistory(prev => {
@@ -417,7 +575,43 @@ function App() {
     setTodayFocusMin(m => m + mins);
   };
 
+  if (!initialized) {
+    return (
+      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--app-bg-page)" }}>
+        <div style={{ textAlign: "center", color: "var(--app-muted)" }}>
+          <div style={{ width: "40px", height: "40px", border: "3px solid var(--app-border)", borderTopColor: "var(--app-accent)", borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "0 auto 1rem" }} />
+          <p style={{ fontSize: "0.9rem" }}>جاري التحميل...</p>
+          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        </div>
+      </div>
+    );
+  }
+
+  const isAuthPage = location === "/login" || location === "/register";
+
+  if (!user && !isAuthPage) {
+    return (
+      <AppCtx.Provider value={{
+        tasks, setTasks, activeTaskId, setActiveTaskId,
+        workMin, setWorkMin, shortMin, setShortMin, longMin, setLongMin,
+        mode, setMode, seconds, setSeconds, running, setRunning,
+        pomodoroCount, setPomodoroCount, focusHistory, todayFocusMin,
+        addFocusMinutes, intervalRef, focusSecondsRef, sidebarOpen, setSidebarOpen,
+        dark, toggleDark, endTimeRef, muted, setMuted, playBell,
+      }}>
+        <Switch>
+          <Route path="/login" component={LoginPage} />
+          <Route path="/register" component={RegisterPage} />
+          <Route>
+            <LoginPage />
+          </Route>
+        </Switch>
+      </AppCtx.Provider>
+    );
+  }
+
   return (
+    <ConfirmProvider>
     <AppCtx.Provider value={{
       tasks, setTasks, activeTaskId, setActiveTaskId,
       workMin, setWorkMin, shortMin, setShortMin, longMin, setLongMin,
@@ -427,14 +621,27 @@ function App() {
       dark, toggleDark, endTimeRef, muted, setMuted, playBell,
     }}>
       <GlobalHeader />
+      <ErrorBoundary>
+      <Suspense fallback={<PageLoader />}>
       <Switch>
+        <Route path="/login" component={LoginPage} />
+        <Route path="/register" component={RegisterPage} />
+        <Route path="/forgot-password" component={ForgotPasswordPage} />
+        <Route path="/reset-password" component={ResetPasswordPage} />
+        <Route path="/auth/callback" component={AuthCallbackPage} />
         <Route path="/upload/:sessionId?" component={UploadPage} />
+        <Route path="/files/:fileId/studio" component={StudioPage} />
         <Route path="/files/:fileId" component={FileHubPage} />
         <Route path="/" component={HomePage} />
-        <Route path="/projects" component={ProjectsPage} />
+        <Route path="/settings" component={SettingsPage} />
+        <Route component={NotFoundPage} />
       </Switch>
+      </Suspense>
+      </ErrorBoundary>
       <FileSidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <ToastContainer />
     </AppCtx.Provider>
+    </ConfirmProvider>
   );
 }
 
