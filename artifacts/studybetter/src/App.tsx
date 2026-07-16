@@ -4,7 +4,7 @@ import FileSidebar from "./components/FileSidebar";
 import PomodoroTimer from "./components/PomodoroTimer";
 import TaskList from "./components/TaskList";
 import FocusChart from "./components/FocusChart";
-import { Clock, FolderOpen, FileText, Brain, Layers, Sparkles, Moon, Sun, LogOut, User, ChevronDown, Settings } from "lucide-react";
+import { Clock, FolderOpen, FileText, Brain, Layers, Sparkles, Moon, Sun, LogOut, User, ChevronDown, Settings, LogIn } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "./stores/authStore";
 import ProfileModal from "./components/ProfileModal";
@@ -14,6 +14,7 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { ConfirmProvider } from "./components/ConfirmDialog";
 import GlobalSearch from "./components/GlobalSearch";
 import RecentFiles from "./components/RecentFiles";
+import { ProtectedRoute, PublicOnlyRoute } from "./components/RouteGuards";
 
 const LoginPage = lazy(() => import("./pages/login"));
 const RegisterPage = lazy(() => import("./pages/register"));
@@ -25,6 +26,7 @@ const NotFoundPage = lazy(() => import("./pages/not-found"));
 const UploadPage = lazy(() => import("./pages/upload"));
 const FileHubPage = lazy(() => import("./pages/file-hub"));
 const StudioPage = lazy(() => import("./pages/studio"));
+const TasksPage = lazy(() => import("./pages/tasks"));
 
 function PageLoader() {
   return (
@@ -137,7 +139,7 @@ function GlobalHeader() {
       gap: "clamp(0.3rem, 0.8vw, 0.5rem)",
     }}>
       <div style={{ display: "flex", alignItems: "center", gap: "clamp(0.75rem, 1.5vw, 1.5rem)" }}>
-        {user && (
+        {user ? (
           <div ref={menuRef} style={{ position: "relative" }}>
             <button
               onClick={() => setMenuOpen(o => !o)}
@@ -215,6 +217,18 @@ function GlobalHeader() {
               )}
             </AnimatePresence>
           </div>
+        ) : (
+          <button onClick={() => navigate("/login")}
+            style={{
+              background: "var(--app-accent-bg)", border: "1.5px solid var(--app-accent-light)",
+              borderRadius: "clamp(8px, 1.2vw, 10px)", padding: "clamp(0.3rem, 0.5vw, 0.4rem) clamp(0.6rem, 1vw, 0.9rem)",
+              cursor: "pointer", fontSize: "clamp(0.75rem, 1.1vw, 0.9rem)", fontWeight: 700,
+              color: "var(--app-accent)", fontFamily: "inherit",
+              display: "flex", alignItems: "center", gap: "4px",
+              transition: "all 0.15s", whiteSpace: "nowrap",
+            }}>
+            <LogIn size={15} /> <span style={{ display: "inline" }}>دخول</span>
+          </button>
         )}
         <div className="hdr-stats" style={{ display: "flex", alignItems: "center", gap: "clamp(0.75rem, 1.5vw, 1.5rem)" }}>
           <div className="hdr-pomo" style={{ textAlign: "center" }}>
@@ -592,29 +606,6 @@ function App() {
     );
   }
 
-  const isAuthPage = location === "/login" || location === "/register";
-
-  if (!user && !isAuthPage) {
-    return (
-      <AppCtx.Provider value={{
-        tasks, setTasks, activeTaskId, setActiveTaskId,
-        workMin, setWorkMin, shortMin, setShortMin, longMin, setLongMin,
-        mode, setMode, seconds, setSeconds, running, setRunning,
-        pomodoroCount, setPomodoroCount, focusHistory, todayFocusMin,
-        addFocusMinutes, intervalRef, focusSecondsRef, sidebarOpen, setSidebarOpen,
-        dark, toggleDark, endTimeRef, muted, setMuted, playBell,
-      }}>
-        <Switch>
-          <Route path="/login" component={LoginPage} />
-          <Route path="/register" component={RegisterPage} />
-          <Route>
-            <LoginPage />
-          </Route>
-        </Switch>
-      </AppCtx.Provider>
-    );
-  }
-
   return (
     <ConfirmProvider>
     <AppCtx.Provider value={{
@@ -629,16 +620,35 @@ function App() {
       <ErrorBoundary>
       <Suspense fallback={<PageLoader />}>
       <Switch>
-        <Route path="/login" component={LoginPage} />
-        <Route path="/register" component={RegisterPage} />
-        <Route path="/forgot-password" component={ForgotPasswordPage} />
-        <Route path="/reset-password" component={ResetPasswordPage} />
+        <Route path="/login">
+          <PublicOnlyRoute><LoginPage /></PublicOnlyRoute>
+        </Route>
+        <Route path="/register">
+          <PublicOnlyRoute><RegisterPage /></PublicOnlyRoute>
+        </Route>
+        <Route path="/forgot-password">
+          <PublicOnlyRoute><ForgotPasswordPage /></PublicOnlyRoute>
+        </Route>
+        <Route path="/reset-password">
+          <PublicOnlyRoute><ResetPasswordPage /></PublicOnlyRoute>
+        </Route>
         <Route path="/auth/callback" component={AuthCallbackPage} />
-        <Route path="/upload/:sessionId?" component={UploadPage} />
-        <Route path="/files/:fileId/studio" component={StudioPage} />
-        <Route path="/files/:fileId" component={FileHubPage} />
+        <Route path="/upload/:sessionId?">
+          <ProtectedRoute><UploadPage /></ProtectedRoute>
+        </Route>
+        <Route path="/files/:fileId/studio">
+          <ProtectedRoute><StudioPage /></ProtectedRoute>
+        </Route>
+        <Route path="/files/:fileId">
+          <ProtectedRoute><FileHubPage /></ProtectedRoute>
+        </Route>
+        <Route path="/settings">
+          <ProtectedRoute><SettingsPage /></ProtectedRoute>
+        </Route>
+        <Route path="/tasks">
+          <ProtectedRoute><TasksPage /></ProtectedRoute>
+        </Route>
         <Route path="/" component={HomePage} />
-        <Route path="/settings" component={SettingsPage} />
         <Route component={NotFoundPage} />
       </Switch>
       </Suspense>
