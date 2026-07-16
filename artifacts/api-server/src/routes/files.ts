@@ -2,22 +2,33 @@ import { Router, type IRouter } from "express";
 import { db, sessionsTable, pageResultsTable, featureResultsTable } from "@workspace/db";
 import { eq, and, desc } from "drizzle-orm";
 import { randomUUID } from "crypto";
+import { requireAuth } from "../lib/auth";
 
 const router: IRouter = Router();
 
-const LIVE_FEATURES = ["explanation"];
-const COMING_SOON = ["summary", "quiz", "flashcards", "translation"];
+const LIVE_FEATURES = ["explanation"] as const;
+const COMING_SOON = ["summary", "quiz", "flashcards", "translation"] as const;
+
+router.use(requireAuth);
+
+async function assertUserSession(userId: string, sessionId: string): Promise<boolean> {
+  const session = await db.query.sessionsTable.findFirst({
+    where: and(eq(sessionsTable.id, sessionId), eq(sessionsTable.userId, userId)),
+    columns: { id: true },
+  });
+  return !!session;
+}
 
 router.get("/files/:fileId/features", async (req, res) => {
   const { fileId } = req.params;
+  if (!(await assertUserSession(req.user!.id, fileId))) {
+    res.status(404).json({ error: "file not found" });
+    return;
+  }
   try {
     const file = await db.query.sessionsTable.findFirst({
-      where: eq(sessionsTable.id, fileId),
+      where: and(eq(sessionsTable.id, fileId), eq(sessionsTable.userId, req.user!.id)),
     });
-    if (!file) {
-      res.status(404).json({ error: "file not found" });
-      return;
-    }
 
     const results = await db
       .select()
@@ -39,7 +50,8 @@ router.get("/files/:fileId/features", async (req, res) => {
 });
 
 router.post("/files/:fileId/features/:featureType", async (req, res) => {
-  const { fileId, featureType } = req.params;
+  const { fileId } = req.params;
+  const featureType = String(req.params.featureType) as typeof LIVE_FEATURES[number];
   const { text } = req.body as { text?: string };
 
   if (!text || !text.trim()) {
@@ -52,15 +64,12 @@ router.post("/files/:fileId/features/:featureType", async (req, res) => {
     return;
   }
 
-  try {
-    const file = await db.query.sessionsTable.findFirst({
-      where: eq(sessionsTable.id, fileId),
-    });
-    if (!file) {
-      res.status(404).json({ error: "file not found" });
-      return;
-    }
+  if (!(await assertUserSession(req.user!.id, fileId))) {
+    res.status(404).json({ error: "file not found" });
+    return;
+  }
 
+  try {
     const id = randomUUID();
     const [created] = await db
       .insert(featureResultsTable)

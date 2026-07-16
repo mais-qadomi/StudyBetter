@@ -37,7 +37,29 @@ export function capturePageCanvas(wrapperEl: HTMLElement): string | null {
   try {
     const canvas = wrapperEl.querySelector("canvas");
     if (!canvas) return null;
-    return canvas.toDataURL("image/jpeg", 0.8);
+
+    const MAX_DIMENSION = 1200;
+    let width = canvas.width;
+    let height = canvas.height;
+
+    if (width > MAX_DIMENSION || height > MAX_DIMENSION) {
+      const ratio = Math.min(MAX_DIMENSION / width, MAX_DIMENSION / height);
+      width = Math.round(width * ratio);
+      height = Math.round(height * ratio);
+    }
+
+    const offscreen = document.createElement("canvas");
+    offscreen.width = width;
+    offscreen.height = height;
+    const ctx = offscreen.getContext("2d");
+    if (!ctx) return canvas.toDataURL("image/jpeg", 0.6);
+    ctx.drawImage(canvas, 0, 0, width, height);
+
+    let dataUrl = offscreen.toDataURL("image/jpeg", 0.6);
+    if (dataUrl.length > 4 * 1024 * 1024) {
+      dataUrl = offscreen.toDataURL("image/jpeg", 0.3);
+    }
+    return dataUrl;
   } catch {
     return null;
   }

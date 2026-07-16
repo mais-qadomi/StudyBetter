@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
@@ -14,12 +14,27 @@ interface RawFileViewerProps {
 
 export default function RawFileViewer({ file, numPages, onNumPages }: RawFileViewerProps) {
   const [pageNumber, setPageNumber] = useState(1);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [pageWidth, setPageWidth] = useState(600);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const update = () => {
+      const w = el.clientWidth;
+      setPageWidth(Math.max(w - 32, 280));
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const isPdf = file.type === "application/pdf";
 
   if (isPdf) {
     return (
-      <div style={{ width: "100%", maxWidth: "860px" }}>
+      <div ref={containerRef} style={{ width: "100%", overflow: "hidden" }}>
         <Document
           file={file}
           onLoadSuccess={({ numPages: n }) => { if (!numPages) onNumPages(n); }}
@@ -28,23 +43,23 @@ export default function RawFileViewer({ file, numPages, onNumPages }: RawFileVie
         >
           {numPages > 0 && (
             <>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "1rem", marginBottom: "0.75rem" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "1rem", marginBottom: "0.75rem", flexWrap: "wrap" }}>
                 <button
                   onClick={() => setPageNumber(p => Math.max(1, p - 1))}
                   disabled={pageNumber <= 1}
-                  style={{ padding: "0.3rem 1rem", borderRadius: "6px", border: "1px solid var(--app-border)", background: "var(--app-card)", cursor: "pointer", fontSize: "0.9rem", fontFamily: "inherit", fontWeight: 600, color: pageNumber <= 1 ? "var(--app-muted-light)" : "var(--app-text)" }}
-                ><ArrowLeft size={16} /> السابق</button>
-                <span style={{ fontSize: "0.9rem", color: "var(--app-muted)", fontWeight: 600 }}>
+                  style={{ padding: "0.4rem 1.1rem", borderRadius: "8px", border: "1px solid var(--app-border)", background: "var(--app-card)", cursor: "pointer", fontSize: "0.95rem", fontFamily: "inherit", fontWeight: 600, color: pageNumber <= 1 ? "var(--app-muted-light)" : "var(--app-text)" }}
+                ><ArrowLeft size={18} /> السابق</button>
+                <span style={{ fontSize: "0.95rem", color: "var(--app-muted)", fontWeight: 600 }}>
                   صفحة {pageNumber} من {numPages}
                 </span>
                 <button
                   onClick={() => setPageNumber(p => Math.min(numPages, p + 1))}
                   disabled={pageNumber >= numPages}
-                  style={{ padding: "0.3rem 1rem", borderRadius: "6px", border: "1px solid var(--app-border)", background: "var(--app-card)", cursor: "pointer", fontSize: "0.9rem", fontFamily: "inherit", fontWeight: 600, color: pageNumber >= numPages ? "var(--app-muted-light)" : "var(--app-text)" }}
-                >التالي <ArrowRight size={16} /></button>
+                  style={{ padding: "0.4rem 1.1rem", borderRadius: "8px", border: "1px solid var(--app-border)", background: "var(--app-card)", cursor: "pointer", fontSize: "0.95rem", fontFamily: "inherit", fontWeight: 600, color: pageNumber >= numPages ? "var(--app-muted-light)" : "var(--app-text)" }}
+                >التالي <ArrowRight size={18} /></button>
               </div>
-              <div style={{ display: "flex", justifyContent: "center" }}>
-                <Page pageNumber={pageNumber} width={600} />
+              <div style={{ display: "flex", justifyContent: "center", overflow: "auto" }}>
+                <Page pageNumber={pageNumber} width={pageWidth} />
               </div>
             </>
           )}

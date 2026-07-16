@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, Check, X, GripVertical, ListChecks } from "lucide-react";
+import { Plus, Check, X, GripVertical, ListChecks, Trash2 } from "lucide-react";
 
 export interface Task {
   id: string;
@@ -149,9 +149,27 @@ export default function TaskList({ tasks, activeTaskId, onSetTasks, onSetActiveT
       </div>
 
       {tasks.length > 0 && (
-        <p style={{ margin: "0.8rem 0 0", fontSize: "0.78rem", color: "var(--app-muted)", textAlign: "center" }}>
-          اسحبي المهمة وضعيها على البومودورو لتحديدها 👈
-        </p>
+        <div style={{ margin: "0.8rem 0 0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <p style={{ margin: 0, fontSize: "0.78rem", color: "var(--app-muted)" }}>
+            {tasks.filter(t => t.done).length}/{tasks.length} مكتملة
+          </p>
+          {tasks.some(t => t.done) && (
+            <button
+              onClick={() => {
+                onSetTasks(tasks.filter(t => !t.done));
+                if (activeTaskId && tasks.find(t => t.id === activeTaskId)?.done) onSetActiveTaskId(null);
+              }}
+              style={{
+                background: "none", border: "none", cursor: "pointer",
+                fontSize: "0.75rem", color: "var(--app-red)", fontFamily: "inherit",
+                display: "flex", alignItems: "center", gap: "4px", fontWeight: 600,
+                padding: "2px 6px", borderRadius: "6px",
+              }}
+            >
+              <Trash2 size={12} /> حذف المكتملة
+            </button>
+          )}
+        </div>
       )}
     </div>
   );

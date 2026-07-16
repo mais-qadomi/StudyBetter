@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useLocation } from "wouter";
 import { Folder as FolderIcon, FolderOpen, FileText, Plus, X, ChevronLeft, ArrowRight, Check, Loader2 } from "lucide-react";
+import { useConfirm } from "../components/ConfirmDialog";
 import {
     apiGetProjects,
     apiCreateProject,
@@ -41,6 +42,7 @@ type ProjectData = {
 
 export default function ProjectsPage() {
     const [, navigate] = useLocation();
+    const { confirm } = useConfirm();
     const [projects, setProjects] = useState<Project[]>([]);
     const [loading, setLoading] = useState(true);
     const [newName, setNewName] = useState("");
@@ -80,7 +82,7 @@ export default function ProjectsPage() {
     }
 
     async function handleDeleteProject(id: string) {
-        if (!confirm("تأكيد حذف المشروع؟")) return;
+        if (!await confirm({ message: "تأكيد حذف المشروع؟", danger: true })) return;
         await apiDeleteProject(id);
         setProjects(p => p.filter(x => x.id !== id));
         if (selectedData?.project.id === id) setSelectedData(null);
@@ -144,7 +146,7 @@ export default function ProjectsPage() {
     }
 
     async function handleDeleteFolder(id: string) {
-        if (!confirm("حذف المجلد؟ الملفات تفضل موجودة.")) return;
+        if (!await confirm({ message: "حذف المجلد؟ الملفات تفضل موجودة.", danger: true })) return;
         await apiDeleteFolder(id);
         setSelectedData(prev => prev ? { ...prev, folders: sortedFolders(prev.folders.filter(f => f.id !== id)) } : prev);
     }

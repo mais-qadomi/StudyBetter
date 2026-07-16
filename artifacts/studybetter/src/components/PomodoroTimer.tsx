@@ -183,7 +183,7 @@ export default function PomodoroTimer({
       <div style={{ display: "flex", gap: "0.75rem", marginTop: "0.5rem" }}>
         <button onClick={() => onSetRunning(!running)}
           style={{
-            background: running ? "linear-gradient(135deg, var(--app-red), #dc2626)" : "linear-gradient(135deg, var(--app-primary-light), var(--app-primary))",
+            background: running ? "linear-gradient(135deg, var(--app-red), var(--app-danger))" : "linear-gradient(135deg, var(--app-primary-light), var(--app-primary))",
             color: "#fff", border: "none", borderRadius: "12px",
             padding: "0.7rem 1.8rem", fontSize: "1rem", cursor: "pointer",
             fontWeight: 700, boxShadow: running ? "0 4px 15px rgba(239,68,68,0.3)" : "0 4px 15px rgba(40,120,200,0.3)",

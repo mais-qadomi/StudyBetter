@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useLocation } from "wouter";
+import { useConfirm } from "./ConfirmDialog";
 import {
   apiGetProjects,
   apiGetProject,
@@ -9,11 +10,14 @@ import {
   apiCreateFolder,
   apiRenameFolder,
   apiDeleteFolder,
+  apiMoveFolder,
   apiDeleteSession,
+  apiRenameSession,
   apiAssignSessionToFolder,
   apiGetBookmarks,
   apiCreateBookmark,
   apiDeleteBookmark,
+  apiUpdateBookmark,
   type Project,
   type StoredSession,
   type Folder,
@@ -27,23 +31,9 @@ interface FileSidebarProps {
   onClose: () => void;
 }
 
-const COLORS = {
-  bg: "#ffffff",
-  overlay: "rgba(0,0,0,0.2)",
-  border: "#e2e8f0",
-  accent: "#6366f1",
-  accentLight: "#a5b4fc",
-  accentBg: "#eef2ff",
-  title: "#1e293b",
-  text: "#334155",
-  muted: "#94a3b8",
-  red: "#ef4444",
-  green: "#10b981",
-  shadow: "0 4px 24px rgba(0,0,0,0.1)",
-};
-
 export default function FileSidebar({ open, onClose }: FileSidebarProps) {
   const [, navigate] = useLocation();
+  const { confirm } = useConfirm();
   const [projects, setProjects] = useState<Project[]>([]);
   const [cache, setCache] = useState<ProjectCache>({});
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
@@ -53,10 +43,12 @@ export default function FileSidebar({ open, onClose }: FileSidebarProps) {
   const [newProjectName, setNewProjectName] = useState("");
   const [creatingFolder, setCreatingFolder] = useState<{ projectId: string; parentId: string | null } | null>(null);
   const [newFolderName, setNewFolderName] = useState("");
-  const [editingItem, setEditingItem] = useState<{ id: string; type: "project" | "folder"; name: string } | null>(null);
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; id: string; type: "project" | "folder" | "session" } | null>(null);
+  const [editingItem, setEditingItem] = useState<{ id: string; type: "project" | "folder" | "session" | "bookmark"; name: string } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; id: string; type: "project" | "folder" | "session" | "bookmark" } | null>(null);
   const [loadingProjects, setLoadingProjects] = useState<Set<string>>(new Set());
+  const [initialLoading, setInitialLoading] = useState(false);
   const [dragSession, setDragSession] = useState<{ id: string; sourceFolderId: string | null; sourceProjectId: string } | null>(null);
+  const [dragFolder, setDragFolder] = useState<{ id: string; sourceParentFolderId: string | null; sourceProjectId: string } | null>(null);
   const [dragOverProjectId, setDragOverProjectId] = useState<string | null>(null);
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
   const [showAddMenu, setShowAddMenu] = useState<{ projectId: string; folderId: string | null } | null>(null);
@@ -97,14 +89,16 @@ export default function FileSidebar({ open, onClose }: FileSidebarProps) {
   useEffect(() => {
     if (!open) {
       setContextMenu(null); setCreatingProject(false); setCreatingFolder(null);
-      setEditingItem(null); setDragSession(null); setShowAddMenu(null);
+      setEditingItem(null); setDragSession(null); setDragFolder(null); setShowAddMenu(null);
       setCreatingLink(null); setCreatingNote(null);
     }
   }, [open]);
 
   async function loadProjects() {
+    setInitialLoading(true);
     const list = await apiGetProjects();
     setProjects(list);
+    setInitialLoading(false);
   }
 
   async function loadProjectData(projectId: string) {
@@ -246,7 +240,7 @@ export default function FileSidebar({ open, onClose }: FileSidebarProps) {
   }
 
   async function handleDeleteBookmark(id: string, projectId: string) {
-    if (!confirm("حذف العنصر؟")) return;
+    if (!await confirm({ message: "حذف العنصر؟", danger: true })) return;
     await apiDeleteBookmark(id);
     setCache(prev => ({
       ...prev,
@@ -263,13 +257,43 @@ export default function FileSidebar({ open, onClose }: FileSidebarProps) {
       if (editingItem.type === "project") {
         await apiRenameProject(editingItem.id, editingItem.name.trim());
         setProjects(prev => prev.map(p => p.id === editingItem.id ? { ...p, name: editingItem.name.trim() } : p));
-      } else {
+      } else if (editingItem.type === "folder") {
         await apiRenameFolder(editingItem.id, editingItem.name.trim());
         for (const pid of Object.keys(cache)) {
           const folders = cache[pid]?.folders;
           if (folders?.some(f => f.id === editingItem.id)) {
             const data = await apiGetProject(pid);
             if (data) setCache(prev => ({ ...prev, [pid]: { ...prev[pid], folders: data.folders } }));
+            break;
+          }
+        }
+      } else if (editingItem.type === "bookmark") {
+        await apiUpdateBookmark(editingItem.id, { name: editingItem.name.trim() });
+        for (const pid of Object.keys(cache)) {
+          const bookmarks = cache[pid]?.bookmarks;
+          if (bookmarks?.some(b => b.id === editingItem.id)) {
+            setCache(prev => ({
+              ...prev,
+              [pid]: {
+                ...prev[pid],
+                bookmarks: prev[pid].bookmarks.map(b => b.id === editingItem.id ? { ...b, name: editingItem.name.trim() } : b),
+              },
+            }));
+            break;
+          }
+        }
+      } else {
+        await apiRenameSession(editingItem.id, editingItem.name.trim());
+        for (const pid of Object.keys(cache)) {
+          const sessions = cache[pid]?.sessions;
+          if (sessions?.some(s => s.id === editingItem.id)) {
+            setCache(prev => ({
+              ...prev,
+              [pid]: {
+                ...prev[pid],
+                sessions: prev[pid].sessions.map(s => s.id === editingItem.id ? { ...s, fileName: editingItem.name.trim() } : s),
+              },
+            }));
             break;
           }
         }
@@ -281,19 +305,19 @@ export default function FileSidebar({ open, onClose }: FileSidebarProps) {
   async function handleDelete(id: string, type: "project" | "folder" | "session", projectId?: string) {
     setContextMenu(null);
     if (type === "project") {
-      if (!confirm("حذف المشروع؟ كل الملفات والمجلدات الداخلية رح تُحذف.")) return;
+      if (!await confirm({ message: "حذف المشروع؟ كل الملفات والمجلدات الداخلية رح تُحذف.", danger: true })) return;
       await apiDeleteProject(id);
       setProjects(prev => prev.filter(p => p.id !== id));
       setCache(prev => { const c = { ...prev }; delete c[id]; return c; });
     } else if (type === "folder") {
-      if (!confirm("حذف المجلد؟ الملفات اللي جواه بتضل موجودة بدون مجلد.")) return;
+      if (!await confirm({ message: "حذف المجلد؟ الملفات اللي جواه بتضل موجودة بدون مجلد.", danger: true })) return;
       await apiDeleteFolder(id);
       if (projectId) {
         const data = await apiGetProject(projectId);
         if (data) setCache(prev => ({ ...prev, [projectId]: { ...prev[projectId], folders: data.folders } }));
       }
     } else {
-      if (!confirm("حذف الملف؟")) return;
+      if (!await confirm({ message: "حذف الملف؟", danger: true })) return;
       await apiDeleteSession(id);
       for (const pid of Object.keys(cache)) {
         const s = cache[pid]?.sessions;
@@ -323,10 +347,25 @@ export default function FileSidebar({ open, onClose }: FileSidebarProps) {
     setDragSession(null); setDragOverProjectId(null); setDragOverFolderId(null);
   }
 
+  async function handleDropFolder(targetProjectId: string, targetFolderId: string | null) {
+    if (!dragFolder) return;
+    if (dragFolder.id === targetFolderId) { setDragFolder(null); setDragOverProjectId(null); setDragOverFolderId(null); return; }
+    try {
+      await apiMoveFolder(dragFolder.id, targetFolderId);
+      const data = await apiGetProject(targetProjectId);
+      if (data) setCache(prev => ({ ...prev, [targetProjectId]: { ...prev[targetProjectId], folders: data.folders } }));
+      if (dragFolder.sourceProjectId !== targetProjectId) {
+        const srcData = await apiGetProject(dragFolder.sourceProjectId);
+        if (srcData) setCache(prev => ({ ...prev, [dragFolder.sourceProjectId]: { ...prev[dragFolder.sourceProjectId], folders: srcData.folders } }));
+      }
+    } catch { }
+    setDragFolder(null); setDragOverProjectId(null); setDragOverFolderId(null);
+  }
+
   // ── Styles ──
   const overlayStyle: React.CSSProperties = {
     position: "fixed", inset: 0, zIndex: 200,
-    background: COLORS.overlay,
+    background: "rgba(0,0,0,0.2)",
     visibility: open ? "visible" : "hidden",
     opacity: open ? 1 : 0,
     transition: "opacity 0.2s, visibility 0.2s",
@@ -334,24 +373,24 @@ export default function FileSidebar({ open, onClose }: FileSidebarProps) {
 
   const panelStyle: React.CSSProperties = {
     position: "fixed", top: 0, left: 0, bottom: 0, width: "380px",
-    background: COLORS.bg, zIndex: 201,
-    boxShadow: COLORS.shadow,
+    background: "var(--app-card)", zIndex: 201,
+    boxShadow: "var(--app-shadow)",
     display: "flex", flexDirection: "column",
     transform: open ? "translateX(0)" : "translateX(-100%)",
     transition: "transform 0.25s ease",
-    borderLeft: "1px solid " + COLORS.border,
+    borderLeft: "1px solid " + "var(--app-border)",
     fontFamily: "'Segoe UI', system-ui, sans-serif",
   };
 
   const headerStyle: React.CSSProperties = {
     display: "flex", alignItems: "center", justifyContent: "space-between",
     padding: "1rem 1.2rem",
-    borderBottom: "1px solid " + COLORS.border,
+    borderBottom: "1px solid " + "var(--app-border)",
   };
 
   const btnIcon: React.CSSProperties = {
     background: "none", border: "none", cursor: "pointer",
-    fontSize: "1.35rem", color: COLORS.text, padding: "6px 10px",
+    fontSize: "1.35rem", color: "var(--app-text)", padding: "6px 10px",
     borderRadius: "8px", display: "flex", alignItems: "center",
     fontFamily: "inherit",
   };
@@ -364,13 +403,13 @@ export default function FileSidebar({ open, onClose }: FileSidebarProps) {
     display: "flex", alignItems: "center", gap: "8px",
     padding: "0.55rem 0.7rem", borderRadius: "8px",
     margin: "3px 0.5rem", cursor: "pointer",
-    background: isDragOver ? COLORS.accentBg : isSelected ? COLORS.accentBg + "80" : "transparent",
-    border: isDragOver ? "2px dashed " + COLORS.accentLight : "2px solid transparent",
+    background: isDragOver ? "var(--app-accent-bg)" : isSelected ? "var(--app-accent-bg)" + "80" : "transparent",
+    border: isDragOver ? "2px dashed " + "var(--app-accent-light)" : "2px solid transparent",
     transition: "background 0.1s",
   });
 
   const nodeNameStyle: React.CSSProperties = {
-    flex: 1, fontSize: "1.1rem", color: COLORS.text,
+    flex: 1, fontSize: "1.1rem", color: "var(--app-text)",
     overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
   };
 
@@ -379,21 +418,21 @@ export default function FileSidebar({ open, onClose }: FileSidebarProps) {
   });
 
   const contextMenuStyle: React.CSSProperties = {
-    position: "fixed", zIndex: 300, background: COLORS.bg,
-    border: "1px solid " + COLORS.border, borderRadius: "8px",
-    boxShadow: COLORS.shadow, minWidth: "200px", overflow: "hidden",
+    position: "fixed", zIndex: 300, background: "var(--app-card)",
+    border: "1px solid " + "var(--app-border)", borderRadius: "8px",
+    boxShadow: "var(--app-shadow)", minWidth: "200px", overflow: "hidden",
   };
 
   const contextItemStyle: React.CSSProperties = {
     padding: "0.7rem 1.2rem", fontSize: "1rem", cursor: "pointer",
-    color: COLORS.text, border: "none", background: "none",
+    color: "var(--app-text)", border: "none", background: "none",
     width: "100%", textAlign: "right", fontFamily: "inherit",
   };
 
   const addMenuStyle: React.CSSProperties = {
-    position: "absolute", zIndex: 250, background: COLORS.bg,
-    border: "1px solid " + COLORS.border, borderRadius: "8px",
-    boxShadow: COLORS.shadow, minWidth: "210px", overflow: "hidden",
+    position: "absolute", zIndex: 250, background: "var(--app-card)",
+    border: "1px solid " + "var(--app-border)", borderRadius: "8px",
+    boxShadow: "var(--app-shadow)", minWidth: "210px", overflow: "hidden",
     top: "100%", left: "0", marginTop: "2px",
   };
 
@@ -402,24 +441,37 @@ export default function FileSidebar({ open, onClose }: FileSidebarProps) {
     const isDragOver = dragOverFolderId === null && dragOverProjectId === projectId && dragSession !== null;
     return (
       <div key={s.id}
-        draggable
+        draggable={editingItem?.id !== s.id}
         onDragStart={() => setDragSession({ id: s.id, sourceFolderId: s.folderId, sourceProjectId: projectId })}
         onDragEnd={() => { setDragSession(null); setDragOverProjectId(null); setDragOverFolderId(null); }}
         onDrop={(e) => { e.preventDefault(); void handleDrop(projectId, null); }}
         onDragOver={(e) => { e.preventDefault(); setDragOverProjectId(projectId); setDragOverFolderId(null); }}
         onDragLeave={() => { setDragOverProjectId(null); }}
         onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setContextMenu({ x: e.clientX, y: e.clientY, id: s.id, type: "session" }); }}
-        onClick={() => { navigate("/upload/" + s.id); onClose(); }}
+        onClick={() => { if (editingItem?.id !== s.id) { navigate("/files/" + s.id); onClose(); } }}
         style={{
           ...rowStyle(depth, false, isDragOver),
           opacity: dragSession?.id === s.id ? 0.4 : 1,
           marginRight: (depth * 1.2) + "rem",
         }}
-        onMouseOver={e => { if (!isDragOver) e.currentTarget.style.background = "#f8fafc"; }}
+        onMouseOver={e => { if (!isDragOver) e.currentTarget.style.background = "var(--app-muted-light)"; }}
         onMouseOut={e => { if (!isDragOver) e.currentTarget.style.background = "transparent"; }}
       >
         <span style={iconStyle()}>📄</span>
-        <span style={nodeNameStyle}>{s.fileName}</span>
+        {editingItem?.id === s.id ? (
+          <input ref={editInputRef} value={editingItem.name}
+            onChange={e => setEditingItem({ ...editingItem, name: e.target.value })}
+            onKeyDown={e => { if (e.key === "Enter") void handleRename(); if (e.key === "Escape") setEditingItem(null); }}
+            onBlur={() => void handleRename()}
+            onClick={e => e.stopPropagation()}
+            style={{ flex: 1, fontSize: "1rem", padding: "0.3rem 0.5rem", borderRadius: "6px", border: "1px solid " + "var(--app-accent)", outline: "none", fontFamily: "inherit", background: "var(--app-card)", color: "var(--app-text)" }}
+          />
+        ) : (
+          <span onDoubleClick={() => setEditingItem({ id: s.id, type: "session", name: s.fileName })}
+            style={nodeNameStyle}>
+            {s.fileName}
+          </span>
+        )}
       </div>
     );
   }
@@ -428,7 +480,7 @@ export default function FileSidebar({ open, onClose }: FileSidebarProps) {
     if (!matchesSearch(b.name)) return null;
     return (
       <div key={b.id}
-        onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setContextMenu({ x: e.clientX, y: e.clientY, id: b.id, type: "session" }); }}
+        onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setContextMenu({ x: e.clientX, y: e.clientY, id: b.id, type: "bookmark" }); }}
         onClick={() => {
           if (b.type === "link" && b.url) window.open(b.url, "_blank", "noopener");
         }}
@@ -436,12 +488,12 @@ export default function FileSidebar({ open, onClose }: FileSidebarProps) {
           ...rowStyle(depth, false),
           marginRight: (depth * 1.2) + "rem",
         }}
-        onMouseOver={e => e.currentTarget.style.background = "#f8fafc"}
+        onMouseOver={e => e.currentTarget.style.background = "var(--app-muted-light)"}
         onMouseOut={e => e.currentTarget.style.background = "transparent"}
       >
         <span style={iconStyle()}>{b.type === "link" ? "🔗" : "📝"}</span>
         <span style={nodeNameStyle}>{b.name}</span>
-        {b.type === "note" && <span style={{ fontSize: "1rem", color: COLORS.muted }}>📌</span>}
+        {b.type === "note" && <span style={{ fontSize: "1rem", color: "var(--app-muted)" }}>📌</span>}
       </div>
     );
   }
@@ -460,17 +512,19 @@ export default function FileSidebar({ open, onClose }: FileSidebarProps) {
     return (
       <div key={f.id} style={{ position: "relative" }}>
         <div
-          draggable={false}
+          draggable
+          onDragStart={(e) => { e.stopPropagation(); setDragFolder({ id: f.id, sourceParentFolderId: f.parentFolderId, sourceProjectId: projectId }); }}
+          onDragEnd={() => { setDragFolder(null); setDragOverProjectId(null); setDragOverFolderId(null); }}
           onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setContextMenu({ x: e.clientX, y: e.clientY, id: f.id, type: "folder" }); }}
           onClick={() => toggleFolder(f.id)}
-          onDrop={(e) => { e.preventDefault(); void handleDrop(projectId, f.id); }}
-          onDragOver={(e) => { e.preventDefault(); setDragOverProjectId(projectId); setDragOverFolderId(f.id); }}
+          onDrop={(e) => { e.preventDefault(); e.stopPropagation(); if (dragSession) void handleDrop(projectId, f.id); else if (dragFolder) void handleDropFolder(projectId, f.id); }}
+          onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setDragOverProjectId(projectId); setDragOverFolderId(f.id); }}
           onDragLeave={() => setDragOverFolderId(null)}
           style={{
             ...rowStyle(depth, false, isDragOver),
             marginRight: (depth * 1.2) + "rem",
           }}
-          onMouseOver={e => { if (!isDragOver) e.currentTarget.style.background = "#f8fafc"; }}
+          onMouseOver={e => { if (!isDragOver) e.currentTarget.style.background = "var(--app-muted-light)"; }}
           onMouseOut={e => { if (!isDragOver) e.currentTarget.style.background = "transparent"; }}
         >
           {editingItem?.id === f.id ? (
@@ -479,13 +533,13 @@ export default function FileSidebar({ open, onClose }: FileSidebarProps) {
               onKeyDown={e => { if (e.key === "Enter") void handleRename(); if (e.key === "Escape") setEditingItem(null); }}
               onBlur={() => void handleRename()}
               onClick={e => e.stopPropagation()}
-              style={{ flex: 1, fontSize: "1rem", padding: "0.3rem 0.5rem", borderRadius: "6px", border: "1px solid " + COLORS.accent, outline: "none", fontFamily: "inherit", background: COLORS.bg, color: COLORS.text }}
+              style={{ flex: 1, fontSize: "1rem", padding: "0.3rem 0.5rem", borderRadius: "6px", border: "1px solid " + "var(--app-accent)", outline: "none", fontFamily: "inherit", background: "var(--app-card)", color: "var(--app-text)" }}
             />
           ) : (
             <>
               <span
                 onClick={(e) => { e.stopPropagation(); toggleFolder(f.id); }}
-                style={{ ...iconStyle("1.05rem"), color: COLORS.muted, cursor: "pointer", transition: "transform 0.15s", transform: expanded ? "rotate(90deg)" : "" }}
+                style={{ ...iconStyle("1.05rem"), color: "var(--app-muted)", cursor: "pointer", transition: "transform 0.15s", transform: expanded ? "rotate(90deg)" : "" }}
               >
                 {hasChildren ? "▸" : "•"}
               </span>
@@ -496,19 +550,19 @@ export default function FileSidebar({ open, onClose }: FileSidebarProps) {
               </span>
               <div style={{ position: "relative" }}>
                 <button onClick={(e) => { e.stopPropagation(); setShowAddMenu(p => p?.projectId === projectId && p?.folderId === f.id ? null : { projectId, folderId: f.id }); }}
-                  style={{ ...btnIcon, fontSize: "1.1rem", color: COLORS.muted, padding: "4px 8px" }}>+</button>
+                  style={{ ...btnIcon, fontSize: "1.1rem", color: "var(--app-muted)", padding: "4px 8px" }}>+</button>
                 {showAddMenu?.projectId === projectId && showAddMenu?.folderId === f.id && (
                   <div ref={addMenuRef} style={addMenuStyle} onClick={e => e.stopPropagation()}>
                     <button style={contextItemStyle}
-                      onMouseOver={e => e.currentTarget.style.background = "#f8fafc"}
+                      onMouseOver={e => e.currentTarget.style.background = "var(--app-muted-light)"}
                       onMouseOut={e => e.currentTarget.style.background = "none"}
                       onClick={() => { setShowAddMenu(null); navigate("/upload?projectId=" + projectId + "&folderId=" + f.id); onClose(); }}>📄 رفع ملف</button>
                     <button style={contextItemStyle}
-                      onMouseOver={e => e.currentTarget.style.background = "#f8fafc"}
+                      onMouseOver={e => e.currentTarget.style.background = "var(--app-muted-light)"}
                       onMouseOut={e => e.currentTarget.style.background = "none"}
                       onClick={() => { setShowAddMenu(null); setCreatingLink({ projectId, folderId: f.id }); setNewLinkName(""); setNewLinkUrl(""); }}>🔗 إضافة رابط</button>
                     <button style={contextItemStyle}
-                      onMouseOver={e => e.currentTarget.style.background = "#f8fafc"}
+                      onMouseOver={e => e.currentTarget.style.background = "var(--app-muted-light)"}
                       onMouseOut={e => e.currentTarget.style.background = "none"}
                       onClick={() => { setShowAddMenu(null); setCreatingNote({ projectId, folderId: f.id }); setNewNoteName(""); setNewNoteContent(""); }}>📝 إضافة نص</button>
                   </div>
@@ -523,7 +577,7 @@ export default function FileSidebar({ open, onClose }: FileSidebarProps) {
               onChange={e => setNewFolderName(e.target.value)}
               onKeyDown={e => { if (e.key === "Enter") void handleCreateFolder(); if (e.key === "Escape") { setCreatingFolder(null); setNewFolderName(""); } }}
               placeholder="اسم المجلد"
-              style={{ width: "100%", padding: "0.4rem 0.6rem", borderRadius: "6px", border: "1px solid " + COLORS.border, fontSize: "1rem", outline: "none", fontFamily: "inherit", boxSizing: "border-box" }}
+              style={{ width: "100%", padding: "0.4rem 0.6rem", borderRadius: "6px", border: "1px solid " + "var(--app-border)", fontSize: "1rem", outline: "none", fontFamily: "inherit", boxSizing: "border-box" }}
             />
           </div>
         )}
@@ -532,14 +586,14 @@ export default function FileSidebar({ open, onClose }: FileSidebarProps) {
             <input value={newLinkName} onChange={e => setNewLinkName(e.target.value)}
               placeholder="اسم الرابط"
               onKeyDown={e => e.key === "Enter" && void handleAddLink()}
-              style={{ width: "100%", padding: "0.35rem 0.6rem", borderRadius: "6px", border: "1px solid " + COLORS.accent, fontSize: "1rem", outline: "none", fontFamily: "inherit", boxSizing: "border-box" }} />
+              style={{ width: "100%", padding: "0.35rem 0.6rem", borderRadius: "6px", border: "1px solid " + "var(--app-accent)", fontSize: "1rem", outline: "none", fontFamily: "inherit", boxSizing: "border-box" }} />
             <input value={newLinkUrl} onChange={e => setNewLinkUrl(e.target.value)}
               placeholder="https://..." dir="ltr"
               onKeyDown={e => e.key === "Enter" && void handleAddLink()}
-              style={{ width: "100%", padding: "0.35rem 0.6rem", borderRadius: "6px", border: "1px solid " + COLORS.border, fontSize: "1rem", outline: "none", fontFamily: "inherit", boxSizing: "border-box" }} />
+              style={{ width: "100%", padding: "0.35rem 0.6rem", borderRadius: "6px", border: "1px solid " + "var(--app-border)", fontSize: "1rem", outline: "none", fontFamily: "inherit", boxSizing: "border-box" }} />
             <div style={{ display: "flex", gap: "0.3rem" }}>
-              <button onClick={handleAddLink} style={{ ...btnIcon, fontSize: "0.95rem", color: "#fff", background: COLORS.accent, padding: "0.3rem 0.7rem", borderRadius: "6px" }}>حفظ</button>
-              <button onClick={() => setCreatingLink(null)} style={{ ...btnIcon, fontSize: "0.95rem", color: COLORS.muted, padding: "0.3rem 0.7rem" }}>إلغاء</button>
+              <button onClick={handleAddLink} style={{ ...btnIcon, fontSize: "0.95rem", color: "#fff", background: "var(--app-accent)", padding: "0.3rem 0.7rem", borderRadius: "6px" }}>حفظ</button>
+              <button onClick={() => setCreatingLink(null)} style={{ ...btnIcon, fontSize: "0.95rem", color: "var(--app-muted)", padding: "0.3rem 0.7rem" }}>إلغاء</button>
             </div>
           </div>
         )}
@@ -547,13 +601,13 @@ export default function FileSidebar({ open, onClose }: FileSidebarProps) {
           <div style={{ marginRight: ((depth + 1) * 1.2 + 0.5) + "rem", padding: "0.3rem 0.5rem", display: "flex", flexDirection: "column", gap: "0.3rem" }}>
             <input value={newNoteName} onChange={e => setNewNoteName(e.target.value)}
               placeholder="عنوان الملاحظة"
-              style={{ width: "100%", padding: "0.35rem 0.6rem", borderRadius: "6px", border: "1px solid " + COLORS.accent, fontSize: "1rem", outline: "none", fontFamily: "inherit", boxSizing: "border-box" }} />
+              style={{ width: "100%", padding: "0.35rem 0.6rem", borderRadius: "6px", border: "1px solid " + "var(--app-accent)", fontSize: "1rem", outline: "none", fontFamily: "inherit", boxSizing: "border-box" }} />
             <textarea value={newNoteContent} onChange={e => setNewNoteContent(e.target.value)}
               placeholder="محتوى الملاحظة..." rows={3}
-              style={{ width: "100%", padding: "0.35rem 0.6rem", borderRadius: "6px", border: "1px solid " + COLORS.border, fontSize: "1rem", outline: "none", fontFamily: "inherit", boxSizing: "border-box", resize: "vertical" }} />
+              style={{ width: "100%", padding: "0.35rem 0.6rem", borderRadius: "6px", border: "1px solid " + "var(--app-border)", fontSize: "1rem", outline: "none", fontFamily: "inherit", boxSizing: "border-box", resize: "vertical" }} />
             <div style={{ display: "flex", gap: "0.3rem" }}>
-              <button onClick={handleAddNote} style={{ ...btnIcon, fontSize: "0.95rem", color: "#fff", background: COLORS.accent, padding: "0.3rem 0.7rem", borderRadius: "6px" }}>حفظ</button>
-              <button onClick={() => setCreatingNote(null)} style={{ ...btnIcon, fontSize: "0.95rem", color: COLORS.muted, padding: "0.3rem 0.7rem" }}>إلغاء</button>
+              <button onClick={handleAddNote} style={{ ...btnIcon, fontSize: "0.95rem", color: "#fff", background: "var(--app-accent)", padding: "0.3rem 0.7rem", borderRadius: "6px" }}>حفظ</button>
+              <button onClick={() => setCreatingNote(null)} style={{ ...btnIcon, fontSize: "0.95rem", color: "var(--app-muted)", padding: "0.3rem 0.7rem" }}>إلغاء</button>
             </div>
           </div>
         )}
@@ -585,9 +639,9 @@ export default function FileSidebar({ open, onClose }: FileSidebarProps) {
           onDragLeave={() => setDragOverProjectId(null)}
           style={{
             ...rowStyle(0, false, isDragOver),
-            fontWeight: 600, color: COLORS.title,
+            fontWeight: 600, color: "var(--app-text)",
           }}
-          onMouseOver={e => { if (!isDragOver) e.currentTarget.style.background = "#f8fafc"; }}
+          onMouseOver={e => { if (!isDragOver) e.currentTarget.style.background = "var(--app-muted-light)"; }}
           onMouseOut={e => { if (!isDragOver) e.currentTarget.style.background = "transparent"; }}
         >
           {editingItem?.id === p.id ? (
@@ -596,13 +650,13 @@ export default function FileSidebar({ open, onClose }: FileSidebarProps) {
               onKeyDown={e => { if (e.key === "Enter") void handleRename(); if (e.key === "Escape") setEditingItem(null); }}
               onBlur={() => void handleRename()}
               onClick={e => e.stopPropagation()}
-              style={{ flex: 1, fontSize: "1rem", padding: "0.3rem 0.5rem", borderRadius: "6px", border: "1px solid " + COLORS.accent, outline: "none", fontFamily: "inherit", background: COLORS.bg, color: COLORS.text }}
+              style={{ flex: 1, fontSize: "1rem", padding: "0.3rem 0.5rem", borderRadius: "6px", border: "1px solid " + "var(--app-accent)", outline: "none", fontFamily: "inherit", background: "var(--app-card)", color: "var(--app-text)" }}
             />
           ) : (
             <>
               <span
                 onClick={(e) => { e.stopPropagation(); void toggleProject(p.id); }}
-                style={{ ...iconStyle("1.05rem"), color: COLORS.muted, cursor: "pointer", transition: "transform 0.15s", transform: expanded ? "rotate(90deg)" : "" }}
+                style={{ ...iconStyle("1.05rem"), color: "var(--app-muted)", cursor: "pointer", transition: "transform 0.15s", transform: expanded ? "rotate(90deg)" : "" }}
               >
                 ▸
               </span>
@@ -611,26 +665,26 @@ export default function FileSidebar({ open, onClose }: FileSidebarProps) {
                 style={nodeNameStyle}>
                 {p.name}
               </span>
-              {loading && <span style={{ fontSize: "1.1rem", color: COLORS.muted }}>⏳</span>}
+              {loading && <span style={{ fontSize: "1.1rem", color: "var(--app-muted)" }}>⏳</span>}
               <div style={{ position: "relative" }}>
                 <button onClick={(e) => { e.stopPropagation(); setShowAddMenu(prev => { if (prev && prev.projectId === p.id && prev.folderId === null) return null; return { projectId: p.id, folderId: null }; }); }}
-                  style={{ ...btnIcon, fontSize: "1.1rem", color: COLORS.muted, padding: "4px 8px" }}>+</button>
+                  style={{ ...btnIcon, fontSize: "1.1rem", color: "var(--app-muted)", padding: "4px 8px" }}>+</button>
                 {showAddMenu?.projectId === p.id && showAddMenu?.folderId === null && (
                   <div ref={addMenuRef} style={addMenuStyle} onClick={e => e.stopPropagation()}>
                     <button style={contextItemStyle}
-                      onMouseOver={e => e.currentTarget.style.background = "#f8fafc"}
+                      onMouseOver={e => e.currentTarget.style.background = "var(--app-muted-light)"}
                       onMouseOut={e => e.currentTarget.style.background = "none"}
                       onClick={() => { setShowAddMenu(null); setCreatingFolder({ projectId: p.id, parentId: null }); setNewFolderName(""); }}>📁 مجلد جديد</button>
                     <button style={contextItemStyle}
-                      onMouseOver={e => e.currentTarget.style.background = "#f8fafc"}
+                      onMouseOver={e => e.currentTarget.style.background = "var(--app-muted-light)"}
                       onMouseOut={e => e.currentTarget.style.background = "none"}
                       onClick={() => { setShowAddMenu(null); navigate("/upload?projectId=" + p.id); onClose(); }}>📄 رفع ملف</button>
                     <button style={contextItemStyle}
-                      onMouseOver={e => e.currentTarget.style.background = "#f8fafc"}
+                      onMouseOver={e => e.currentTarget.style.background = "var(--app-muted-light)"}
                       onMouseOut={e => e.currentTarget.style.background = "none"}
                       onClick={() => { setShowAddMenu(null); setCreatingLink({ projectId: p.id, folderId: null }); setNewLinkName(""); setNewLinkUrl(""); }}>🔗 إضافة رابط</button>
                     <button style={contextItemStyle}
-                      onMouseOver={e => e.currentTarget.style.background = "#f8fafc"}
+                      onMouseOver={e => e.currentTarget.style.background = "var(--app-muted-light)"}
                       onMouseOut={e => e.currentTarget.style.background = "none"}
                       onClick={() => { setShowAddMenu(null); setCreatingNote({ projectId: p.id, folderId: null }); setNewNoteName(""); setNewNoteContent(""); }}>📝 إضافة نص</button>
                   </div>
@@ -645,7 +699,7 @@ export default function FileSidebar({ open, onClose }: FileSidebarProps) {
               onChange={e => setNewFolderName(e.target.value)}
               onKeyDown={e => { if (e.key === "Enter") void handleCreateFolder(); if (e.key === "Escape") { setCreatingFolder(null); setNewFolderName(""); } }}
               placeholder="اسم المجلد"
-              style={{ width: "100%", padding: "0.4rem 0.6rem", borderRadius: "6px", border: "1px solid " + COLORS.border, fontSize: "1rem", outline: "none", fontFamily: "inherit", boxSizing: "border-box" }}
+              style={{ width: "100%", padding: "0.4rem 0.6rem", borderRadius: "6px", border: "1px solid " + "var(--app-border)", fontSize: "1rem", outline: "none", fontFamily: "inherit", boxSizing: "border-box" }}
             />
           </div>
         )}
@@ -654,14 +708,14 @@ export default function FileSidebar({ open, onClose }: FileSidebarProps) {
             <input value={newLinkName} onChange={e => setNewLinkName(e.target.value)}
               placeholder="اسم الرابط"
               onKeyDown={e => e.key === "Enter" && void handleAddLink()}
-              style={{ width: "100%", padding: "0.35rem 0.6rem", borderRadius: "6px", border: "1px solid " + COLORS.accent, fontSize: "1rem", outline: "none", fontFamily: "inherit", boxSizing: "border-box" }} />
+              style={{ width: "100%", padding: "0.35rem 0.6rem", borderRadius: "6px", border: "1px solid " + "var(--app-accent)", fontSize: "1rem", outline: "none", fontFamily: "inherit", boxSizing: "border-box" }} />
             <input value={newLinkUrl} onChange={e => setNewLinkUrl(e.target.value)}
               placeholder="https://..." dir="ltr"
               onKeyDown={e => e.key === "Enter" && void handleAddLink()}
-              style={{ width: "100%", padding: "0.35rem 0.6rem", borderRadius: "6px", border: "1px solid " + COLORS.border, fontSize: "1rem", outline: "none", fontFamily: "inherit", boxSizing: "border-box" }} />
+              style={{ width: "100%", padding: "0.35rem 0.6rem", borderRadius: "6px", border: "1px solid " + "var(--app-border)", fontSize: "1rem", outline: "none", fontFamily: "inherit", boxSizing: "border-box" }} />
             <div style={{ display: "flex", gap: "0.3rem" }}>
-              <button onClick={handleAddLink} style={{ ...btnIcon, fontSize: "0.95rem", color: "#fff", background: COLORS.accent, padding: "0.3rem 0.7rem", borderRadius: "6px" }}>حفظ</button>
-              <button onClick={() => setCreatingLink(null)} style={{ ...btnIcon, fontSize: "0.95rem", color: COLORS.muted, padding: "0.3rem 0.7rem" }}>إلغاء</button>
+              <button onClick={handleAddLink} style={{ ...btnIcon, fontSize: "0.95rem", color: "#fff", background: "var(--app-accent)", padding: "0.3rem 0.7rem", borderRadius: "6px" }}>حفظ</button>
+              <button onClick={() => setCreatingLink(null)} style={{ ...btnIcon, fontSize: "0.95rem", color: "var(--app-muted)", padding: "0.3rem 0.7rem" }}>إلغاء</button>
             </div>
           </div>
         )}
@@ -669,13 +723,13 @@ export default function FileSidebar({ open, onClose }: FileSidebarProps) {
           <div style={{ marginRight: "1.2rem", padding: "0.3rem 0.5rem", display: "flex", flexDirection: "column", gap: "0.3rem" }}>
             <input value={newNoteName} onChange={e => setNewNoteName(e.target.value)}
               placeholder="عنوان الملاحظة"
-              style={{ width: "100%", padding: "0.35rem 0.6rem", borderRadius: "6px", border: "1px solid " + COLORS.accent, fontSize: "1rem", outline: "none", fontFamily: "inherit", boxSizing: "border-box" }} />
+              style={{ width: "100%", padding: "0.35rem 0.6rem", borderRadius: "6px", border: "1px solid " + "var(--app-accent)", fontSize: "1rem", outline: "none", fontFamily: "inherit", boxSizing: "border-box" }} />
             <textarea value={newNoteContent} onChange={e => setNewNoteContent(e.target.value)}
               placeholder="محتوى الملاحظة..." rows={3}
-              style={{ width: "100%", padding: "0.35rem 0.6rem", borderRadius: "6px", border: "1px solid " + COLORS.border, fontSize: "1rem", outline: "none", fontFamily: "inherit", boxSizing: "border-box", resize: "vertical" }} />
+              style={{ width: "100%", padding: "0.35rem 0.6rem", borderRadius: "6px", border: "1px solid " + "var(--app-border)", fontSize: "1rem", outline: "none", fontFamily: "inherit", boxSizing: "border-box", resize: "vertical" }} />
             <div style={{ display: "flex", gap: "0.3rem" }}>
-              <button onClick={handleAddNote} style={{ ...btnIcon, fontSize: "0.95rem", color: "#fff", background: COLORS.accent, padding: "0.3rem 0.7rem", borderRadius: "6px" }}>حفظ</button>
-              <button onClick={() => setCreatingNote(null)} style={{ ...btnIcon, fontSize: "0.95rem", color: COLORS.muted, padding: "0.3rem 0.7rem" }}>إلغاء</button>
+              <button onClick={handleAddNote} style={{ ...btnIcon, fontSize: "0.95rem", color: "#fff", background: "var(--app-accent)", padding: "0.3rem 0.7rem", borderRadius: "6px" }}>حفظ</button>
+              <button onClick={() => setCreatingNote(null)} style={{ ...btnIcon, fontSize: "0.95rem", color: "var(--app-muted)", padding: "0.3rem 0.7rem" }}>إلغاء</button>
             </div>
           </div>
         )}
@@ -685,7 +739,7 @@ export default function FileSidebar({ open, onClose }: FileSidebarProps) {
             {rootSessions.map(s => renderSession(s, p.id, 1))}
             {rootBookmarks.map(b => renderBookmark(b, p.id, 1))}
             {!loading && cache[p.id] && rootFolders.length === 0 && rootSessions.length === 0 && rootBookmarks.length === 0 && (
-              <p style={{ margin: "0.3rem 2.5rem", fontSize: "1rem", color: COLORS.muted }}>فارغ</p>
+              <p style={{ margin: "0.3rem 2.5rem", fontSize: "1rem", color: "var(--app-muted)" }}>فارغ</p>
             )}
           </>
         )}
@@ -698,23 +752,23 @@ export default function FileSidebar({ open, onClose }: FileSidebarProps) {
   return (
     <>
       <div style={overlayStyle} onClick={onClose} />
-      <div style={panelStyle} onClick={e => e.stopPropagation()} dir="rtl">
+      <div style={panelStyle} onClick={() => { setContextMenu(null); setShowAddMenu(null); }} dir="rtl">
         <div style={headerStyle}>
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
             <span style={{ fontSize: "1.5rem" }}>📁</span>
-            <span style={{ fontSize: "1.3rem", fontWeight: 700, color: COLORS.title }}>الملفات</span>
+            <span style={{ fontSize: "1.3rem", fontWeight: 700, color: "var(--app-text)" }}>الملفات</span>
           </div>
           <div style={{ display: "flex", gap: "2px" }}>
             <button onClick={() => setCreatingProject(true)}
               style={{ ...btnIcon, fontWeight: 700 }} title="مشروع جديد">+</button>
-            <button onClick={onClose} style={{ ...btnIcon, color: COLORS.muted }} title="إغلاق">✕</button>
+            <button onClick={onClose} style={{ ...btnIcon, color: "var(--app-muted)" }} title="إغلاق">✕</button>
           </div>
         </div>
 
         <div style={{ padding: "0.6rem 1rem" }}>
           <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
             placeholder="🔍 بحث..."
-            style={{ width: "100%", padding: "0.7rem 0.9rem", borderRadius: "8px", border: "1px solid " + COLORS.border, fontSize: "1rem", outline: "none", fontFamily: "inherit", boxSizing: "border-box", direction: "rtl" }}
+            style={{ width: "100%", padding: "0.7rem 0.9rem", borderRadius: "8px", border: "1px solid " + "var(--app-border)", fontSize: "1rem", outline: "none", fontFamily: "inherit", boxSizing: "border-box", direction: "rtl" }}
           />
         </div>
 
@@ -724,14 +778,18 @@ export default function FileSidebar({ open, onClose }: FileSidebarProps) {
               onChange={e => setNewProjectName(e.target.value)}
               onKeyDown={e => { if (e.key === "Enter") void handleCreateProject(); if (e.key === "Escape") { setCreatingProject(false); setNewProjectName(""); } }}
               placeholder="اسم المشروع"
-              style={{ width: "100%", padding: "0.5rem 0.8rem", borderRadius: "6px", border: "1px solid " + COLORS.accent, fontSize: "1rem", outline: "none", fontFamily: "inherit", boxSizing: "border-box" }}
+              style={{ width: "100%", padding: "0.5rem 0.8rem", borderRadius: "6px", border: "1px solid " + "var(--app-accent)", fontSize: "1rem", outline: "none", fontFamily: "inherit", boxSizing: "border-box" }}
             />
           </div>
         )}
 
         <div style={treeStyle}>
-          {filteredProjects.length === 0 ? (
-            <p style={{ textAlign: "center", color: COLORS.muted, fontSize: "1rem", padding: "2rem 1rem", margin: 0 }}>
+          {initialLoading ? (
+            <p style={{ textAlign: "center", color: "var(--app-muted)", fontSize: "1rem", padding: "2rem 1rem", margin: 0, display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem" }}>
+              <span style={{ display: "inline-block", animation: "spin 1s linear infinite" }}>⏳</span> جاري التحميل...
+            </p>
+          ) : filteredProjects.length === 0 ? (
+            <p style={{ textAlign: "center", color: "var(--app-muted)", fontSize: "1rem", padding: "2rem 1rem", margin: 0 }}>
               {searchQuery.trim() ? "لا نتائج" : "ما عندك مشاريع إلى الآن"}
             </p>
           ) : (
@@ -740,34 +798,50 @@ export default function FileSidebar({ open, onClose }: FileSidebarProps) {
         </div>
 
         {contextMenu && (
-          <div style={{ ...contextMenuStyle, top: contextMenu.y, left: contextMenu.x }}>
+          <div style={{ ...contextMenuStyle, top: contextMenu.y, left: contextMenu.x }}
+            onClick={e => e.stopPropagation()}>
             <button style={contextItemStyle}
-              onMouseOver={e => e.currentTarget.style.background = "#f8fafc"}
+              onMouseOver={e => e.currentTarget.style.background = "var(--app-muted-light)"}
               onMouseOut={e => e.currentTarget.style.background = "none"}
               onClick={() => {
-                if (contextMenu.type === "session") { setContextMenu(null); return; }
-                const item = contextMenu.type === "project"
-                  ? projects.find(p => p.id === contextMenu.id)
+                const ctx = contextMenu;
+                const item = ctx.type === "project"
+                  ? projects.find(p => p.id === ctx.id)
+                  : ctx.type === "folder"
+                  ? (() => {
+                    const pid = projects.find(p => cache[p.id]?.folders.some((f: Folder) => f.id === ctx.id))?.id;
+                    return pid ? getFolders(pid).find(f => f.id === ctx.id) : undefined;
+                  })()
+                  : ctx.type === "bookmark"
+                  ? (() => {
+                    const found = Object.entries(cache).find(([, v]) => v.bookmarks.some(b => b.id === ctx.id));
+                    return found ? found[1].bookmarks.find(b => b.id === ctx.id) : undefined;
+                  })()
                   : (() => {
-                    const pid = projects.find(p => cache[p.id]?.folders.some((f: Folder) => f.id === contextMenu.id))?.id;
-                    return pid ? getFolders(pid).find(f => f.id === contextMenu.id) : undefined;
+                    const found = Object.entries(cache).find(([, v]) => v.sessions.some(s => s.id === ctx.id));
+                    return found ? found[1].sessions.find(s => s.id === ctx.id) : undefined;
                   })();
-                if (item) setEditingItem({ id: contextMenu.id, type: contextMenu.type, name: item.name });
+                if (item) setEditingItem({ id: ctx.id, type: ctx.type, name: "name" in item ? item.name : "fileName" in item ? (item as StoredSession).fileName : "" });
                 setContextMenu(null);
               }}>
               ✏️ إعادة تسمية
             </button>
             <button style={contextItemStyle}
-              onMouseOver={e => e.currentTarget.style.background = "#f8fafc"}
+              onMouseOver={e => e.currentTarget.style.background = "var(--app-muted-light)"}
               onMouseOut={e => e.currentTarget.style.background = "none"}
               onClick={() => {
-                if (contextMenu.type === "project") void handleDelete(contextMenu.id, "project");
-                else if (contextMenu.type === "folder") {
-                  const found = Object.entries(cache).find(([, v]) => v.folders.some(f => f.id === contextMenu.id));
-                  void handleDelete(contextMenu.id, "folder", found?.[0]);
+                const ctx = contextMenu;
+                setContextMenu(null);
+                if (ctx.type === "project") void handleDelete(ctx.id, "project");
+                else if (ctx.type === "folder") {
+                  const found = Object.entries(cache).find(([, v]) => v.folders.some(f => f.id === ctx.id));
+                  void handleDelete(ctx.id, "folder", found?.[0]);
+                } else if (ctx.type === "bookmark") {
+                  const found = Object.entries(cache).find(([, v]) => v.bookmarks.some(b => b.id === ctx.id));
+                  if (found) void handleDeleteBookmark(ctx.id, found[0]);
                 } else {
-                  const found = Object.entries(cache).find(([, v]) => v.sessions.some(s => s.id === contextMenu.id));
-                  if (found) void handleDelete(contextMenu.id, "session", found[0]);
+                  const found = Object.entries(cache).find(([, v]) => v.sessions.some(s => s.id === ctx.id));
+                  if (found) void handleDelete(ctx.id, "session", found[0]);
                 }
               }}>
               🗑 حذف

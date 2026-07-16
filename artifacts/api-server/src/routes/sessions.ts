@@ -2,8 +2,12 @@ import { Router, type IRouter } from "express";
 import { db, sessionsTable, pageResultsTable, projectsTable, foldersTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { randomUUID } from "crypto";
+import { requireAuth } from "../lib/auth";
 
 const router: IRouter = Router();
+
+// All session routes require authentication
+router.use(requireAuth);
 
 // ===== SESSIONS =====
 
@@ -11,7 +15,7 @@ router.get("/sessions/:id", async (req, res) => {
   const { id } = req.params;
   try {
     const session = await db.query.sessionsTable.findFirst({
-      where: eq(sessionsTable.id, id),
+      where: and(eq(sessionsTable.id, id), eq(sessionsTable.userId, req.user!.id)),
     });
     if (!session) {
       res.status(404).json({ error: "session not found" });
@@ -43,7 +47,7 @@ router.post("/sessions", async (req, res) => {
   }
   try {
     const existing = await db.query.sessionsTable.findFirst({
-      where: eq(sessionsTable.id, sessionId),
+      where: and(eq(sessionsTable.id, sessionId), eq(sessionsTable.userId, req.user!.id)),
     });
     if (existing) {
       const [updated] = await db
@@ -56,7 +60,7 @@ router.post("/sessions", async (req, res) => {
     }
     const [created] = await db
       .insert(sessionsTable)
-      .values({ id: sessionId, fileName, fileSize, numPages, projectId: projectId ?? null })
+      .values({ id: sessionId, fileName, fileSize, numPages, projectId: projectId ?? null, userId: req.user!.id })
       .returning();
     res.json(created);
   } catch (err) {
@@ -79,7 +83,7 @@ router.put("/sessions/:id/pages/:pageNum", async (req, res) => {
   }
   try {
     const sessionExists = await db.query.sessionsTable.findFirst({
-      where: eq(sessionsTable.id, id),
+      where: and(eq(sessionsTable.id, id), eq(sessionsTable.userId, req.user!.id)),
     });
     if (!sessionExists) {
       res.status(404).json({ error: "session not found" });
@@ -129,6 +133,13 @@ router.put("/sessions/:id/pages/:pageNum", async (req, res) => {
 router.delete("/sessions/:id", async (req, res) => {
   const { id } = req.params;
   try {
+    const session = await db.query.sessionsTable.findFirst({
+      where: and(eq(sessionsTable.id, id), eq(sessionsTable.userId, req.user!.id)),
+    });
+    if (!session) {
+      res.status(404).json({ error: "session not found" });
+      return;
+    }
     await db.delete(sessionsTable).where(eq(sessionsTable.id, id));
     res.json({ ok: true });
   } catch (err) {
@@ -141,18 +152,46 @@ router.patch("/sessions/:id/project", async (req, res) => {
   const { id } = req.params;
   const { projectId } = req.body as { projectId: string | null };
   try {
+    const session = await db.query.sessionsTable.findFirst({
+      where: and(eq(sessionsTable.id, id), eq(sessionsTable.userId, req.user!.id)),
+    });
+    if (!session) {
+      res.status(404).json({ error: "session not found" });
+      return;
+    }
     const [updated] = await db
       .update(sessionsTable)
       .set({ projectId: projectId ?? null })
       .where(eq(sessionsTable.id, id))
       .returning();
-    if (!updated) {
-      res.status(404).json({ error: "session not found" });
-      return;
-    }
     res.json(updated);
   } catch (err) {
     req.log.error({ err }, "PATCH /sessions/:id/project failed");
+    res.status(500).json({ error: "database error" });
+  }
+});
+
+router.patch("/sessions/:id/rename", async (req, res) => {
+  const { id } = req.params;
+  const { fileName } = req.body as { fileName?: string };
+  if (!fileName?.trim()) {
+    res.status(400).json({ error: "fileName is required" });
+    return;
+  }
+  try {
+    const session = await db.query.sessionsTable.findFirst({
+      where: and(eq(sessionsTable.id, id), eq(sessionsTable.userId, req.user!.id)),
+    });
+    if (!session) {
+      res.status(404).json({ error: "session not found" });
+      return;
+    }
+    await db.update(sessionsTable)
+      .set({ fileName: fileName.trim(), updatedAt: new Date() })
+      .where(eq(sessionsTable.id, id));
+    res.json({ ok: true });
+  } catch (err) {
+    req.log.error({ err }, "PATCH /sessions/:id/rename failed");
     res.status(500).json({ error: "database error" });
   }
 });
@@ -161,7 +200,9 @@ router.patch("/sessions/:id/project", async (req, res) => {
 
 router.get("/projects", async (req, res) => {
   try {
-    const projects = await db.select().from(projectsTable).orderBy(projectsTable.createdAt);
+    const projects = await db.select().from(projectsTable)
+      .where(eq(projectsTable.userId, req.user!.id))
+      .orderBy(projectsTable.createdAt);
     res.json(projects);
   } catch (err) {
     req.log.error({ err }, "GET /projects failed");
@@ -175,7 +216,7 @@ router.get("/projects/:id", async (req, res) => {
     const [project] = await db
       .select()
       .from(projectsTable)
-      .where(eq(projectsTable.id, id))
+      .where(and(eq(projectsTable.id, id), eq(projectsTable.userId, req.user!.id)))
       .limit(1);
     if (!project) {
       res.status(404).json({ error: "project not found" });
@@ -184,7 +225,7 @@ router.get("/projects/:id", async (req, res) => {
     const sessions = await db
       .select()
       .from(sessionsTable)
-      .where(eq(sessionsTable.projectId, id))
+      .where(and(eq(sessionsTable.projectId, id), eq(sessionsTable.userId, req.user!.id)))
       .orderBy(sessionsTable.createdAt);
     const folders = await db
       .select()
@@ -207,7 +248,7 @@ router.post("/projects", async (req, res) => {
   try {
     const [created] = await db
       .insert(projectsTable)
-      .values({ id: randomUUID(), name: name.trim(), description: description?.trim() })
+      .values({ id: randomUUID(), name: name.trim(), description: description?.trim(), userId: req.user!.id })
       .returning();
     res.json(created);
   } catch (err) {
@@ -220,6 +261,13 @@ router.patch("/projects/:id", async (req, res) => {
   const { id } = req.params;
   const { name, description } = req.body as { name?: string; description?: string };
   try {
+    const existing = await db.query.projectsTable.findFirst({
+      where: and(eq(projectsTable.id, id), eq(projectsTable.userId, req.user!.id)),
+    });
+    if (!existing) {
+      res.status(404).json({ error: "project not found" });
+      return;
+    }
     const [updated] = await db
       .update(projectsTable)
       .set({
@@ -228,10 +276,6 @@ router.patch("/projects/:id", async (req, res) => {
       })
       .where(eq(projectsTable.id, id))
       .returning();
-    if (!updated) {
-      res.status(404).json({ error: "project not found" });
-      return;
-    }
     res.json(updated);
   } catch (err) {
     req.log.error({ err }, "PATCH /projects/:id failed");
@@ -242,6 +286,13 @@ router.patch("/projects/:id", async (req, res) => {
 router.delete("/projects/:id", async (req, res) => {
   const { id } = req.params;
   try {
+    const existing = await db.query.projectsTable.findFirst({
+      where: and(eq(projectsTable.id, id), eq(projectsTable.userId, req.user!.id)),
+    });
+    if (!existing) {
+      res.status(404).json({ error: "project not found" });
+      return;
+    }
     await db.delete(projectsTable).where(eq(projectsTable.id, id));
     res.json({ ok: true });
   } catch (err) {

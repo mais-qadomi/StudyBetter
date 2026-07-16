@@ -1,6 +1,5 @@
 const VISION_MODELS = [
-  "llama-3.2-90b-vision-preview",
-  "llama-3.2-11b-vision-preview",
+  "meta-llama/llama-4-scout-17b-16e-instruct",
 ];
 
 const MAX_ATTEMPTS = 3;
@@ -78,7 +77,7 @@ async function callGroqVisionWithModel(
           { role: "system", content: visionSystemPrompt },
           { role: "user", content },
         ],
-        max_tokens: 3000,
+        max_completion_tokens: 3000,
         temperature: 0.4,
       }),
       signal,

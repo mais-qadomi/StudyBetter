@@ -42,12 +42,20 @@ export default function FileHubPage() {
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState<"viewer" | string>("viewer");
   const [applying, setApplying] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => {
+    const handler = () => setScrolled(window.scrollY > 4);
+    window.addEventListener("scroll", handler, { passive: true });
+    return () => window.removeEventListener("scroll", handler);
+  }, []);
 
   const [pageTexts, setPageTexts] = useState<Record<number, string>>({});
   const [pageResults, setPageResults] = useState<Record<number, PageResultUI>>({});
   const [explaining, setExplaining] = useState<Set<number>>(new Set());
   const [bulkProgress, setBulkProgress] = useState<{ current: number; total: number } | null>(null);
   const pageTextsRef = useRef<Record<number, string>>({});
+  const pageTypesRef = useRef<Record<number, "text" | "image" | "mixed">>({});
 
   const resultByType = new Map(
     (featuresData?.results ?? []).map(r => [r.featureType, r]),
@@ -109,21 +117,12 @@ export default function FileHubPage() {
     setApplying(false);
   }, [fileId, featuresData]);
 
-  const handleTextReady = useCallback((pageNum: number, text: string) => {
+  const handleTextReady = useCallback((pageNum: number, text: string, pageType?: "text" | "image" | "mixed") => {
     pageTextsRef.current[pageNum] = text;
     setPageTexts(prev => ({ ...prev, [pageNum]: text }));
+    if (pageType) pageTypesRef.current[pageNum] = pageType;
     if (fileId) void apiSavePage(fileId, pageNum, { extractedText: text });
   }, [fileId]);
-
-  const waitForPageText = useCallback(async (pageNum: number, maxWaitMs = 12000): Promise<string | null> => {
-    const start = Date.now();
-    while (Date.now() - start < maxWaitMs) {
-      const t = pageTextsRef.current[pageNum];
-      if (t) return t;
-      await sleep(400);
-    }
-    return null;
-  }, []);
 
   const explainOnePage = useCallback(async (pageNum: number, imageDataUrl?: string) => {
     const text = pageTextsRef.current[pageNum] ?? "";
@@ -161,23 +160,29 @@ export default function FileHubPage() {
       if (!pageResults[i]?.explanation) toProcess.push(i);
     }
     if (toProcess.length === 0) return;
-    for (let idx = 0; idx < toProcess.length; idx++) {
-      const pn = toProcess[idx];
-      setBulkProgress({ current: idx + 1, total: toProcess.length });
+    const imagePages = toProcess.filter(pn => {
+      const t = pageTypesRef.current[pn];
+      const text = pageTextsRef.current[pn] ?? "";
+      return (t === "image" || t === "mixed" || !text.trim()) && t !== "text";
+    });
+    const textPages = toProcess.filter(pn => !imagePages.includes(pn));
+    for (let idx = 0; idx < textPages.length; idx++) {
+      const pn = textPages[idx];
+      setBulkProgress({ current: idx + 1, total: textPages.length });
       await explainOnePage(pn);
-      if (idx < toProcess.length - 1) await sleep(DELAY_BETWEEN_PAGES_MS);
+      if (idx < textPages.length - 1) await sleep(DELAY_BETWEEN_PAGES_MS);
     }
     setBulkProgress(null);
   }, [bulkProgress, numPages, pageResults, explainOnePage]);
 
   const hasAppliedExplanations = pageResults && Object.values(pageResults).some(r => r.explanation);
   const tabIcons: Record<string, React.ReactNode> = {
-    viewer: <FileText size={16} />,
-    explanation: <BookOpen size={16} />,
-    summary: <Sparkles size={16} />,
-    quiz: <Brain size={16} />,
-    flashcards: <Layers size={16} />,
-    translation: <Globe size={16} />,
+    viewer: <FileText size={20} />,
+    explanation: <BookOpen size={20} />,
+    summary: <Sparkles size={20} />,
+    quiz: <Brain size={20} />,
+    flashcards: <Layers size={20} />,
+    translation: <Globe size={20} />,
   };
   const tabs: { id: string; label: string }[] = [];
   if (file) tabs.push({ id: "viewer", label: "الملف الأصلي" });
@@ -194,16 +199,16 @@ export default function FileHubPage() {
   if (loading) {
     return (
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} dir="rtl" style={{ minHeight: "100vh", background: C.bg, fontFamily: "'Segoe UI', Tahoma, sans-serif", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <p style={{ fontSize: "1.1rem", color: C.muted }}><Loader2 size={18} style={{ animation: "spin 1s linear infinite" }} /> جاري تحميل الملف...</p>
+        <p style={{ fontSize: "1.3rem", color: C.muted }}><Loader2 size={22} style={{ animation: "spin 1s linear infinite" }} /> جاري تحميل الملف...</p>
       </motion.div>
     );
   }
 
   if (error) {
     return (
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} dir="rtl" style={{ minHeight: "100vh", background: C.bg, fontFamily: "'Segoe UI', Tahoma, sans-serif", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: "1rem" }}>
-        <p style={{ fontSize: "1.1rem", color: C.red, fontWeight: 700 }}><AlertTriangle size={20} style={{ verticalAlign: "middle" }} /> {error}</p>
-        <button onClick={() => navigate("/")} style={{ padding: "0.5rem 1.5rem", borderRadius: "8px", border: "1px solid " + C.border, background: "var(--app-card)", cursor: "pointer", fontSize: "0.9rem", fontFamily: "inherit", color: C.text }}><ArrowRight size={18} style={{ verticalAlign: "middle" }} /> الرئيسية</button>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} dir="rtl" style={{ minHeight: "100vh", background: C.bg, fontFamily: "'Segoe UI', Tahoma, sans-serif", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: "1.2rem" }}>
+        <p style={{ fontSize: "1.3rem", color: C.red, fontWeight: 700 }}><AlertTriangle size={24} style={{ verticalAlign: "middle" }} /> {error}</p>
+        <button onClick={() => navigate("/")} style={{ padding: "0.65rem 2rem", borderRadius: "10px", border: "1px solid " + C.border, background: "var(--app-card)", cursor: "pointer", fontSize: "1.05rem", fontFamily: "inherit", color: C.text }}><ArrowRight size={22} style={{ verticalAlign: "middle" }} /> الرئيسية</button>
       </motion.div>
     );
   }
@@ -212,25 +217,40 @@ export default function FileHubPage() {
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} dir="rtl" style={{ minHeight: "100vh", background: C.bg, fontFamily: "'Segoe UI', Tahoma, sans-serif", display: "flex", flexDirection: "column" }}>
       <div style={{
         background: "var(--app-card)", borderBottom: "1.5px solid " + C.border,
-        padding: "0.8rem 1.5rem",
+        padding: "clamp(0.6rem, 2vw, 0.85rem) clamp(0.75rem, 3vw, 1.5rem)",
         display: "flex", alignItems: "center", justifyContent: "space-between",
         position: "sticky", top: 0, zIndex: 10,
+        boxShadow: scrolled ? "0 2px 8px rgba(0,0,0,0.06)" : "none",
+        transition: "box-shadow 0.2s",
+        flexWrap: "wrap", gap: "0.5rem",
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.85rem", minWidth: 0, flex: 1 }}>
           <button onClick={() => navigate("/")}
-            style={{ background: "none", border: "none", cursor: "pointer", fontSize: "1.3rem", color: C.muted, padding: "0.3rem", fontFamily: "inherit" }}><ArrowRight size={20} /></button>
-          <span style={{ fontSize: "1.3rem", fontWeight: 800, color: C.text }}>
+            style={{ background: "none", border: "none", cursor: "pointer", fontSize: "1.35rem", color: C.muted, padding: "0.35rem", fontFamily: "inherit", flexShrink: 0 }}><ArrowRight size={22} /></button>
+          <span style={{ fontSize: "clamp(1rem, 3vw, 1.35rem)", fontWeight: 800, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {featuresData?.file.fileName ?? session?.fileName ?? "الملف"}
           </span>
           {hasAppliedExplanations && (
-            <span style={{ fontSize: "0.85rem", background: "var(--app-block-success-bg)", color: "var(--app-green)", padding: "0.2rem 0.6rem", borderRadius: "6px", fontWeight: 700 }}><CheckCircle size={14} style={{ verticalAlign: "middle" }} /> مشروح</span>
+            <span style={{ fontSize: "0.9rem", background: "var(--app-block-success-bg)", color: "var(--app-green)", padding: "0.2rem 0.65rem", borderRadius: "8px", fontWeight: 700, flexShrink: 0 }}><CheckCircle size={15} style={{ verticalAlign: "middle" }} /> مشروح</span>
+          )}
+          {file && numPages > 0 && (
+            <button
+              onClick={() => navigate(`/files/${fileId}/studio`)}
+              style={{
+                fontSize: "0.85rem", background: "var(--app-accent-bg)", color: "var(--app-accent)",
+                padding: "0.25rem 0.7rem", borderRadius: "8px", fontWeight: 700, flexShrink: 0,
+                border: "1px solid var(--app-accent)", cursor: "pointer", fontFamily: "inherit",
+              }}
+            >
+              استوديو التعليقات
+            </button>
           )}
         </div>
       </div>
 
-      <div style={{ flex: 1, maxWidth: "1200px", margin: "0 auto", padding: "1.5rem 1rem", display: "flex", gap: "1.5rem", width: "100%", boxSizing: "border-box" }}>
+      <div style={{ flex: 1, maxWidth: "1200px", margin: "0 auto", padding: "1.5rem 1rem", display: "flex", flexDirection: "column", gap: "1rem", width: "100%", boxSizing: "border-box" }}>
         {featuresData && (
-          <div style={{ alignSelf: "flex-start" }}>
+          <div style={{ overflowX: "auto" }}>
             <FeatureSidebar
               results={featuresData.results}
               availableFeatures={featuresData.availableFeatures}
@@ -238,23 +258,24 @@ export default function FileHubPage() {
               onSelectFeature={(type) => setActiveTab(type)}
               onApplyFeature={handleApplyFeature}
               applying={applying}
+              compact
             />
           </div>
         )}
 
         <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
           {tabs.length > 1 && (
-            <div style={{ display: "flex", gap: "0.3rem", marginBottom: "1.2rem", borderBottom: "1.5px solid " + C.border, paddingBottom: "0.3rem" }}>
+            <div style={{ display: "flex", gap: "0.4rem", marginBottom: "1rem", borderBottom: "1.5px solid " + C.border, paddingBottom: "0.4rem", overflowX: "auto", WebkitOverflowScrolling: "touch", scrollbarWidth: "none" }}>
               {tabs.map(t => (
                 <button key={t.id} onClick={() => setActiveTab(t.id)}
                   style={{
-                    padding: "0.5rem 1rem", borderRadius: "8px 8px 0 0",
+                    padding: "0.55rem 1rem", borderRadius: "10px 10px 0 0",
                     border: "none",                     background: activeTab === t.id ? "var(--app-card)" : "transparent",
                     color: activeTab === t.id ? C.accent : C.muted,
                     fontWeight: activeTab === t.id ? 700 : 500,
-                    fontSize: "0.9rem", cursor: "pointer",
-                    borderBottom: activeTab === t.id ? "2px solid " + C.accent : "2px solid transparent",
-                    fontFamily: "inherit", transition: "all 0.15s",
+                    fontSize: "0.95rem", cursor: "pointer",
+                    borderBottom: activeTab === t.id ? "2.5px solid " + C.accent : "2.5px solid transparent",
+                    fontFamily: "inherit", transition: "all 0.15s", whiteSpace: "nowrap",
                   }}
                   >{tabIcons[t.id]} {t.label}</button>
               ))}
@@ -283,9 +304,16 @@ export default function FileHubPage() {
             {activeTab !== "viewer" && activeTab !== "explanation" && resultByType.has(activeTab) && (
               <FeatureResultView result={resultByType.get(activeTab)!} />
             )}
+            {activeTab !== "viewer" && activeTab !== "explanation" && !resultByType.has(activeTab) && (
+              <div style={{ textAlign: "center", padding: "3rem 1rem", color: C.muted }}>
+                <p style={{ fontSize: "1.1rem", marginBottom: "0.5rem" }}>لم يتم تطبيق هذه الميزة بعد</p>
+                <p style={{ fontSize: "0.85rem" }}>اضغط على زر التطبيق أعلاه لتوليد النتائج</p>
+              </div>
+            )}
             {activeTab === "viewer" && !file && (
-              <div style={{ textAlign: "center", padding: "3rem 1rem" }}>
-                <p style={{ fontSize: "1rem", color: C.muted }}>الملف غير متاح للمعاينة المباشرة</p>
+              <div style={{ textAlign: "center", padding: "3rem 1rem", color: C.muted }}>
+                <p style={{ fontSize: "1.15rem", marginBottom: "0.5rem" }}>الملف غير متاح للمعاينة المباشرة</p>
+                <p style={{ fontSize: "0.85rem" }}>يمكنك استخدام علامة التبويب "الشرح" لمراجعة المحتوى</p>
               </div>
             )}
           </div>

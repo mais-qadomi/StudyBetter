@@ -70,16 +70,16 @@ function FormattedText({ text }: { text: string }) {
 function PageWithText({
   pageNumber, numPages, width,
   result, explaining, savedText,
-  pageType,
   onTextReady, onExplain,
 }: {
   pageNumber: number; numPages: number; width: number;
   result: PageResultUI | null; explaining: boolean;
-  savedText: string; pageType: PageType | null;
+  savedText: string;
   onTextReady: (pageNum: number, text: string, pageType?: PageType, imageDataUrl?: string) => void;
   onExplain: (pageNum: number, imageDataUrl?: string) => void;
 }) {
   const [text, setText] = useState<string>(savedText);
+  const [pageType, setPageType] = useState<PageType | null>(null);
   const imageDataRef = useRef<string | null>(null);
   const pageWrapperRef = useRef<HTMLDivElement>(null);
 
@@ -90,6 +90,7 @@ function PageWithText({
   const handlePageLoad = useCallback(async (page: pdfjs.PDFPageProxy) => {
     try {
       const analysis = await classifyPage(page, pageNumber);
+      setPageType(analysis.type);
       const content = await page.getTextContent();
       const extracted = content.items
         .map((item) => ("str" in item ? item.str : ""))
@@ -102,6 +103,7 @@ function PageWithText({
     } catch {
       const fallback = "تعذّر استخراج النص من هذه الصفحة.";
       setText(fallback);
+      setPageType("image");
       onTextReady(pageNumber, fallback, "image", undefined);
     }
   }, [pageNumber, onTextReady]);
@@ -176,7 +178,6 @@ interface ExplainFileViewProps {
   pageResults: Record<number, PageResultUI>;
   explaining: Set<number>;
   bulkProgress: { current: number; total: number } | null;
-  pageTypes?: Record<number, PageType>;
   onNumPages: (n: number) => void;
   onTextReady: (pageNum: number, text: string, pageType?: PageType, imageDataUrl?: string) => void;
   onExplain: (pageNum: number, imageDataUrl?: string) => Promise<void>;
@@ -186,7 +187,6 @@ interface ExplainFileViewProps {
 export default function ExplainFileView({
   file, numPages,
   pageTexts, pageResults, explaining, bulkProgress,
-  pageTypes,
   onNumPages, onTextReady, onExplain, onExplainAll,
 }: ExplainFileViewProps) {
   const fileUrlRef = useRef<string | null>(null);
@@ -259,7 +259,6 @@ export default function ExplainFileView({
               result={pageResults[i + 1] ?? null}
               explaining={explaining.has(i + 1)}
               savedText={pageTexts[i + 1] ?? ""}
-              pageType={pageTypes?.[i + 1] ?? null}
               onTextReady={onTextReady}
               onExplain={onExplain}
             />

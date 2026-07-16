@@ -3,6 +3,7 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { projectsTable } from "./projects";
 import { foldersTable } from "./folders";
+import { usersTable } from "./users";
 
 export const sessionsTable = pgTable("sessions", {
   id: text("id").primaryKey(),
@@ -11,6 +12,7 @@ export const sessionsTable = pgTable("sessions", {
   numPages: integer("num_pages").notNull().default(0),
   projectId: text("project_id").references(() => projectsTable.id, { onDelete: "set null" }),
   folderId: text("folder_id").references(() => foldersTable.id, { onDelete: "set null" }),
+  userId: text("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

@@ -388,6 +388,18 @@
   body {
     @apply font-sans antialiased;
   }
+
+  /* Mobile improvements */
+  @media (max-width: 640px) {
+    body {
+      -webkit-tap-highlight-color: transparent;
+      -webkit-touch-callout: none;
+    }
+
+    input, textarea, select, button {
+      font-size: 16px !important;
+    }
+  }
 }
 
 /**
@@ -502,4 +514,9 @@
   .border.hover-elevate:not(.no-hover-interaction-elevate)::after {
     inset: -1px;
   }
+}
+
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }

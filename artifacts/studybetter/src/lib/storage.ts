@@ -1,4 +1,5 @@
 import { openDB, type IDBPDatabase } from "idb";
+import { apiFetch } from "./api";
 
 const DB_NAME = "pdf-reader-db";
 const DB_VERSION = 1;
@@ -73,7 +74,7 @@ export type StoredSession = {
 
 export async function apiGetSession(sessionId: string): Promise<{ session: StoredSession; pages: StoredPageResult[] } | null> {
   try {
-    const res = await fetch(`/api/sessions/${sessionId}`);
+    const res = await apiFetch(`/sessions/${sessionId}`);
     if (res.ok) {
       const data = await res.json() as { session: StoredSession; pages: StoredPageResult[] };
       lsSetSession(data.session, data.pages);
@@ -85,7 +86,7 @@ export async function apiGetSession(sessionId: string): Promise<{ session: Store
 
 export async function apiSaveSession(sessionId: string, fileName: string, fileSize: number, numPages: number): Promise<void> {
   try {
-    await fetch("/api/sessions", {
+    await apiFetch("/sessions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ sessionId, fileName, fileSize, numPages }),
@@ -100,7 +101,7 @@ export async function apiSavePage(
   data: { extractedText?: string; translation?: string | null; explanation?: string }
 ): Promise<void> {
   try {
-    await fetch(`/api/sessions/${sessionId}/pages/${pageNumber}`, {
+    await apiFetch(`/sessions/${sessionId}/pages/${pageNumber}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
@@ -111,7 +112,7 @@ export async function apiSavePage(
 
 export async function apiDeleteSession(sessionId: string): Promise<void> {
   try {
-    await fetch(`/api/sessions/${sessionId}`, { method: "DELETE" });
+    await apiFetch(`/sessions/${sessionId}`, { method: "DELETE" });
   } catch {}
   const sessionsKey = "wp-sessions-v2";
   const sessions = JSON.parse(localStorage.getItem(sessionsKey) || "{}");
@@ -119,6 +120,23 @@ export async function apiDeleteSession(sessionId: string): Promise<void> {
   localStorage.setItem(sessionsKey, JSON.stringify(sessions));
   localStorage.removeItem("wp-session-pages-" + sessionId);
 }
+
+export async function apiRenameSession(sessionId: string, fileName: string): Promise<void> {
+  try {
+    await apiFetch(`/sessions/${sessionId}/rename`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fileName }),
+    });
+  } catch {}
+  const sessionsKey = "wp-sessions-v2";
+  const all = JSON.parse(localStorage.getItem(sessionsKey) || "{}");
+  if (all[sessionId]?.session) {
+    all[sessionId].session.fileName = fileName;
+    localStorage.setItem(sessionsKey, JSON.stringify(all));
+  }
+}
+
 // ===== LOCALSTORAGE FALLBACK for Projects / Folders / Bookmarks =====
 
 const LS_PROJECTS_KEY = "wp-projects-v2";
@@ -199,7 +217,7 @@ export type Project = {
 
 export async function apiGetProjects(): Promise<Project[]> {
   try {
-    const res = await fetch("/api/projects");
+    const res = await apiFetch("/projects");
     if (res.ok) {
       const data = await res.json() as Project[];
       lsSetProjects(data);
@@ -211,7 +229,7 @@ export async function apiGetProjects(): Promise<Project[]> {
 
 export async function apiCreateProject(name: string, description?: string): Promise<Project | null> {
   try {
-    const res = await fetch("/api/projects", {
+    const res = await apiFetch("/projects", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name, description }),
@@ -239,7 +257,7 @@ export async function apiCreateProject(name: string, description?: string): Prom
 
 export async function apiDeleteProject(id: string): Promise<void> {
   try {
-    await fetch(`/api/projects/${id}`, { method: "DELETE" });
+    await apiFetch(`/projects/${id}`, { method: "DELETE" });
   } catch {}
   const list = lsGetProjects().filter(p => p.id !== id);
   lsSetProjects(list);
@@ -248,7 +266,7 @@ export async function apiDeleteProject(id: string): Promise<void> {
 
 export async function apiRenameProject(id: string, name: string): Promise<void> {
   try {
-    await fetch(`/api/projects/${id}`, {
+    await apiFetch(`/projects/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: name.trim() }),
@@ -260,7 +278,7 @@ export async function apiRenameProject(id: string, name: string): Promise<void> 
 
 export async function apiGetProject(id: string): Promise<{ project: Project; sessions: StoredSession[]; folders: Folder[] } | null> {
   try {
-    const res = await fetch(`/api/projects/${id}`);
+    const res = await apiFetch(`/projects/${id}`);
     if (res.ok) {
       const data = await res.json() as { project: Project; sessions: StoredSession[]; folders: Folder[] };
       const existingBookmarks = lsGetProjectCache(id)?.bookmarks ?? [];
@@ -276,7 +294,7 @@ export async function apiGetProject(id: string): Promise<{ project: Project; ses
 
 export async function apiAssignSessionToProject(sessionId: string, projectId: string | null): Promise<void> {
   try {
-    await fetch(`/api/sessions/${sessionId}/project`, {
+    await apiFetch(`/sessions/${sessionId}/project`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ projectId }),
@@ -298,7 +316,7 @@ export type Folder = {
 
 export async function apiCreateFolder(name: string, projectId: string, parentFolderId?: string | null): Promise<Folder | null> {
   try {
-    const res = await fetch("/api/folders", {
+    const res = await apiFetch("/folders", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name, projectId, parentFolderId }),
@@ -334,7 +352,7 @@ export async function apiCreateFolder(name: string, projectId: string, parentFol
 
 export async function apiRenameFolder(id: string, name: string): Promise<void> {
   try {
-    await fetch(`/api/folders/${id}`, {
+    await apiFetch(`/folders/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name }),
@@ -342,15 +360,25 @@ export async function apiRenameFolder(id: string, name: string): Promise<void> {
   } catch {}
 }
 
+export async function apiMoveFolder(id: string, parentFolderId: string | null): Promise<void> {
+  try {
+    await apiFetch(`/folders/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ parentFolderId }),
+    });
+  } catch {}
+}
+
 export async function apiDeleteFolder(id: string): Promise<void> {
   try {
-    await fetch(`/api/folders/${id}`, { method: "DELETE" });
+    await apiFetch(`/folders/${id}`, { method: "DELETE" });
   } catch {}
 }
 
 export async function apiAssignSessionToFolder(sessionId: string, folderId: string | null): Promise<void> {
   try {
-    await fetch(`/api/sessions/${sessionId}/folder`, {
+    await apiFetch(`/sessions/${sessionId}/folder`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ folderId }),
@@ -360,7 +388,7 @@ export async function apiAssignSessionToFolder(sessionId: string, folderId: stri
 
 export async function apiReorderFolders(folderIds: string[]): Promise<void> {
   try {
-    await fetch("/api/folders/reorder", {
+    await apiFetch("/folders/reorder", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ folderIds }),
@@ -385,7 +413,7 @@ export type Bookmark = {
 
 export async function apiGetBookmarks(projectId: string): Promise<Bookmark[]> {
   try {
-    const res = await fetch(`/api/bookmarks/${projectId}`);
+    const res = await apiFetch(`/bookmarks/${projectId}`);
     if (res.ok) {
       const data = await res.json() as Bookmark[];
       const cache = lsGetProjectCache(projectId);
@@ -408,7 +436,7 @@ export async function apiCreateBookmark(data: {
   content?: string | null;
 }): Promise<Bookmark | null> {
   try {
-    const res = await fetch("/api/bookmarks", {
+    const res = await apiFetch("/bookmarks", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
@@ -443,7 +471,7 @@ export async function apiCreateBookmark(data: {
 
 export async function apiUpdateBookmark(id: string, data: { name?: string; folderId?: string | null; url?: string | null; content?: string | null }): Promise<void> {
   try {
-    await fetch(`/api/bookmarks/${id}`, {
+    await apiFetch(`/bookmarks/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
@@ -453,7 +481,7 @@ export async function apiUpdateBookmark(id: string, data: { name?: string; folde
 
 export async function apiDeleteBookmark(id: string): Promise<void> {
   try {
-    await fetch(`/api/bookmarks/${id}`, { method: "DELETE" });
+    await apiFetch(`/bookmarks/${id}`, { method: "DELETE" });
   } catch {}
 }
 
@@ -483,7 +511,7 @@ const LS_FEATURES_PREFIX = "wp-file-features-";
 
 export async function apiGetFileFeatures(fileId: string): Promise<FeaturesResponse | null> {
   try {
-    const res = await fetch(`/api/files/${fileId}/features`);
+    const res = await apiFetch(`/files/${fileId}/features`);
     if (res.ok) {
       const data = await res.json() as FeaturesResponse;
       localStorage.setItem(LS_FEATURES_PREFIX + fileId, JSON.stringify(data));
@@ -511,7 +539,7 @@ export async function apiGetFileFeatures(fileId: string): Promise<FeaturesRespon
 
 export async function apiApplyFeature(fileId: string, featureType: string, text: string): Promise<FeatureResultData | null> {
   try {
-    const res = await fetch(`/api/files/${fileId}/features/${featureType}`, {
+    const res = await apiFetch(`/files/${fileId}/features/${featureType}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text }),

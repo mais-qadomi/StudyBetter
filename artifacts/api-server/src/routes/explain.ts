@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import { callGroqVision } from "../lib/vision";
+import { requireAuth } from "../lib/auth";
 
 const router: IRouter = Router();
 
@@ -167,7 +168,7 @@ async function callGroq(
   throw new Error("تجاوز الحد المسموح به من الطلبات على جميع النماذج. يرجى الانتظار ثم المحاولة.");
 }
 
-router.post("/explain", async (req, res) => {
+router.post("/explain", requireAuth, async (req, res) => {
   const { text, images } = req.body as { text?: string; images?: string[] };
 
   if ((!text || text.trim().length === 0) && (!images || images.length === 0)) {

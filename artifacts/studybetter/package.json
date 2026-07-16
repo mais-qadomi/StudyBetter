@@ -72,11 +72,21 @@
     "vaul": "^1.1.2",
     "vite": "catalog:",
     "wouter": "^3.3.5",
-    "zod": "catalog:"
+    "zod": "catalog:",
+    "vitest": "^4.1.10",
+    "fake-indexeddb": "^6.2.5"
   },
   "dependencies": {
     "@fontsource/ibm-plex-sans-arabic": "^5.2.9",
+    "@neondatabase/serverless": "^1.1.0",
+    "bcryptjs": "^3.0.3",
+    "hono": "^4.12.30",
     "idb": "^8.0.3",
-    "react-pdf": "^10.4.1"
+    "jose": "^6.2.3",
+    "konva": "^10.3.0",
+    "pdf-lib": "^1.17.1",
+    "react-konva": "^19.2.5",
+    "react-pdf": "^10.4.1",
+    "zustand": "^5.0.14"
   }
 }
